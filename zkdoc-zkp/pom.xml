@@ -7,8 +7,15 @@
         <dependency><groupId>com.zkdoc</groupId><artifactId>zkdoc-credential</artifactId><version>${project.version}</version></dependency>
         <dependency><groupId>org.springframework</groupId><artifactId>spring-context</artifactId></dependency>
         <dependency><groupId>org.springframework</groupId><artifactId>spring-jdbc</artifactId></dependency>
-        <dependency><groupId>com.weavechain</groupId><artifactId>bulletproofs</artifactId><version>${bulletproofs.version}</version></dependency>
-        <dependency><groupId>com.weavechain</groupId><artifactId>bulletproofs-gadgets</artifactId><version>${bulletproofs.version}</version></dependency>
+        <dependency>
+            <groupId>com.weavechain</groupId><artifactId>bulletproofs</artifactId><version>${bulletproofs.version}</version>
+            <!-- The upstream POM uses a non-existent Maven Central coordinate for Caffeine. -->
+            <exclusions><exclusion><groupId>com.github.ben-manes</groupId><artifactId>caffeine</artifactId></exclusion></exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.weavechain</groupId><artifactId>bulletproofs-gadgets</artifactId><version>${bulletproofs.version}</version>
+            <exclusions><exclusion><groupId>com.github.ben-manes</groupId><artifactId>caffeine</artifactId></exclusion></exclusions>
+        </dependency>
         <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><scope>test</scope></dependency>
     </dependencies>
 </project>

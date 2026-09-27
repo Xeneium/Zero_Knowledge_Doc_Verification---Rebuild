@@ -44,6 +44,17 @@ logs/
 hs_err_pid*
 replay_pid*
 
+# === Frontend Build Output ===
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
+frontend/node/
+
+# === Scratch / Temp Files ===
+dump.txt
+files.txt
+poms.txt
+
 # === Maven Wrapper (if not committed) ===
 !.mvn/wrapper/maven-wrapper.jar
 !.mvn/wrapper/maven-wrapper.properties

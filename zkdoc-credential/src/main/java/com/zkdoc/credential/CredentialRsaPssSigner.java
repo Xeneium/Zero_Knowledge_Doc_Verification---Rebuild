@@ -4,6 +4,7 @@ import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.Signature;
+import java.security.SignatureException;
 import java.security.spec.MGF1ParameterSpec;
 import java.security.spec.PSSParameterSpec;
 import org.springframework.stereotype.Component;
@@ -26,11 +27,17 @@ public class CredentialRsaPssSigner {
     }
 
     public boolean verify(byte[] digest, byte[] value) {
+        if (value == null) {
+            return false;
+        }
         try {
             Signature signature = signature();
             signature.initVerify(keyPair.getPublic());
             signature.update(digest);
             return signature.verify(value);
+        } catch (SignatureException exception) {
+            // Invalid attacker-controlled signature encodings are verification failures, not server failures.
+            return false;
         } catch (GeneralSecurityException exception) {
             throw new IllegalStateException("Unable to verify credential signature", exception);
         }

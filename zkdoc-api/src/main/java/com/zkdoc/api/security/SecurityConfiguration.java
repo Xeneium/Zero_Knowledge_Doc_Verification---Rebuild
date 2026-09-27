@@ -28,7 +28,8 @@ public class SecurityConfiguration {
                         .requestMatchers("/api/v2/zkp/credential-predicates/**").hasRole("VERIFIER")
                         .requestMatchers("/api/documents/**", "/api/credentials/**")
                         .hasAnyRole("ISSUER", "HOLDER", "VERIFIER", "ADMIN")
-                        .anyRequest().authenticated())
+                        .requestMatchers("/api/**").authenticated()
+                        .anyRequest().permitAll())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }

@@ -4,6 +4,7 @@ import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.Signature;
+import java.security.SignatureException;
 import java.security.spec.MGF1ParameterSpec;
 import java.security.spec.PSSParameterSpec;
 import org.springframework.stereotype.Component;
@@ -37,11 +38,17 @@ public class RsaPssSigner {
     }
 
     public boolean verify(byte[] digest, byte[] signature) {
+        if (signature == null) {
+            return false;
+        }
         try {
             Signature verifier = newSignature();
             verifier.initVerify(keyPair.getPublic());
             verifier.update(digest);
             return verifier.verify(signature);
+        } catch (SignatureException exception) {
+            // A malformed external signature is an invalid document, not an application error.
+            return false;
         } catch (GeneralSecurityException exception) {
             throw new IllegalStateException("Unable to verify document signature", exception);
         }
