@@ -1,0 +1,9 @@
+[extend]
+# Use default gitleaks rules
+
+[allowlist]
+description = "Allow local frontend demo capability mock token"
+paths = [
+    '''frontend/src/features/verification/demo/presentationDemo\.ts''',
+    '''frontend/src/features/verification/components/PresentationDemoCard\.tsx'''
+]

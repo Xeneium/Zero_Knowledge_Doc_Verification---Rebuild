@@ -38,6 +38,11 @@ describe('PublicVerificationPage', () => {
     expect(
       screen.getByRole('button', { name: 'Start camera' }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole('img', {
+        name: 'QR code for the presentation verification example',
+      }),
+    ).toBeInTheDocument();
   });
 
   it('validates an empty reference accessibly', async () => {
@@ -95,6 +100,24 @@ describe('PublicVerificationPage', () => {
     expect(screen.getByLabelText('Verification URL or reference')).toHaveValue(
       '',
     );
+  });
+
+  it('uses the single presentation example without calling the backend', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(
+      screen.getByRole('button', { name: 'Verify presentation example' }),
+    );
+
+    expect(
+      await screen.findByRole('heading', { name: 'Document verified' }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('Static presentation result')).toBeInTheDocument();
+    expect(
+      screen.getByText(/does not query the backend, create data/i),
+    ).toBeInTheDocument();
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('distinguishes inactive and invalid backend results', async () => {

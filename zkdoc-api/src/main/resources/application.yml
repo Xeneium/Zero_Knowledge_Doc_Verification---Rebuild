@@ -1,15 +1,78 @@
 spring:
   application:
     name: zkdoc-api
-  datasource:
-    url: jdbc:sqlite:./data/zkdoc.db
-    driver-class-name: org.sqlite.JDBC
-  flyway:
-    enabled: true
-    locations: classpath:db/migration
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 25MB
 
 server:
   port: ${SERVER_PORT:8080}
+  tomcat:
+    max-http-form-post-size: 26214400
+    max-swallow-size: 26214400
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+logging:
+  pattern:
+    level: "%5p [correlationId=%X{correlationId:-none}]"
+  level:
+    root: INFO
+    com.zkdoc: INFO
+    org.springframework.security: WARN
+    org.flywaydb: INFO
 
 zkdoc:
   public-verification-base-url: ${ZKDOC_PUBLIC_VERIFICATION_BASE_URL:http://localhost:8080}
+
+---
+# Local Development Profile (SQLite)
+spring:
+  config:
+    activate:
+      on-profile: local
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:sqlite:./data/zkdoc.db}
+    driver-class-name: org.sqlite.JDBC
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/sqlite
+
+---
+# Production & Container Profile (PostgreSQL 16+)
+spring:
+  config:
+    activate:
+      on-profile: postgres | prod | production
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/zkdoc}
+    username: ${SPRING_DATASOURCE_USERNAME:zkdoc_app}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      pool-name: ZkdocHikariCP
+      maximum-pool-size: ${HIKARI_MAX_POOL_SIZE:10}
+      minimum-idle: ${HIKARI_MIN_IDLE:2}
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/postgresql

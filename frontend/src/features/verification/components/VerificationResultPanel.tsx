@@ -34,8 +34,10 @@ const presentation = {
 
 export function VerificationResultPanel({
   result,
+  presentationDemo = false,
 }: {
   result: VerificationResult;
+  presentationDemo?: boolean;
 }) {
   const view = presentation[result.kind];
   const Icon = view.icon;
@@ -51,18 +53,24 @@ export function VerificationResultPanel({
         </span>
         <div>
           <p className="text-xs font-bold tracking-widest uppercase">
-            Verification complete
+            {presentationDemo
+              ? 'Static presentation result'
+              : 'Verification complete'}
           </p>
           <h2 className="text-ink-950 mt-1 text-xl font-bold">{view.title}</h2>
           <p className="text-ink-800 mt-2 text-sm font-medium">
-            {view.description}
+            {presentationDemo
+              ? 'The presentation sample is configured to show a valid signature and an active document record.'
+              : view.description}
           </p>
           <p className="text-ink-600 mt-3 flex gap-2 text-sm leading-6">
             <AlertTriangle
               className="mt-0.5 size-4 shrink-0"
               aria-hidden="true"
             />
-            {view.detail}
+            {presentationDemo
+              ? 'This is a local-only presentation preview. It does not query the backend, create data, or represent a real document.'
+              : view.detail}
           </p>
         </div>
       </div>

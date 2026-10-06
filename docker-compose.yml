@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: zkdoc-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-zkdoc}
+      POSTGRES_USER: ${POSTGRES_USER:-zkdoc_app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-zkdoc_local_dev_secret}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - zkdoc_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-zkdoc_app} -d ${POSTGRES_DB:-zkdoc}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - zkdoc-network
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: zkdoc-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: postgres
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-zkdoc}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-zkdoc_app}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-zkdoc_local_dev_secret}
+      SERVER_PORT: 8080
+    ports:
+      - "${SERVER_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health/readiness || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - zkdoc-network
+
+volumes:
+  zkdoc_pgdata:
+    driver: local
+
+networks:
+  zkdoc-network:
+    driver: bridge

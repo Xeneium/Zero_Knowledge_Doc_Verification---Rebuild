@@ -1,42 +1,50 @@
-# === Maven Build Output ===
-target/
+# ==============================================================================
+# Zero-Knowledge Document Verification Platform - .gitignore
+# ==============================================================================
 
-# === IDE - IntelliJ IDEA ===
+# === Maven & Build Outputs ===
+target/
+**/target/
+
+# === IDE & Editors ===
 .idea/
 *.iml
-
-# === IDE - Eclipse ===
 .classpath
 .project
 .settings/
-
-# === IDE - VS Code ===
 .vscode/
-
-# === IDE - NetBeans ===
 nbproject/
 nbactions.xml
 nb-configuration.xml
 
-# === OS Generated Files ===
+# === Operating System Files ===
 .DS_Store
 Thumbs.db
 Desktop.ini
 
-# === Environment & Secrets ===
+# === Environment, Secrets & Private Configuration ===
 .env
-*.env.local
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
 
-# === Database Files ===
-data/*.db
-data/*.sqlite
-data/*.sqlite3
+# === Database & Local State ===
+data/
+*.db
+*.sqlite
+*.sqlite3
 
-# === Logs ===
+# === Logs & Diagnostics ===
 *.log
 logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# === Java / JVM ===
+# === Java / JVM Runtime Artifacts ===
 *.class
 *.jar
 *.war
@@ -44,17 +52,22 @@ logs/
 hs_err_pid*
 replay_pid*
 
-# === Frontend Build Output ===
+# === Frontend Node.js Build Artifacts ===
 frontend/node_modules/
 frontend/dist/
 frontend/coverage/
 frontend/node/
+**/node_modules/
 
-# === Scratch / Temp Files ===
+# === Security Scanners & Linters Temporary Caches ===
+.scannerwork/
+.semgrep/
+.trivy/
 dump.txt
 files.txt
 poms.txt
+scratch/
 
-# === Maven Wrapper (if not committed) ===
+# === Maven Wrapper ===
 !.mvn/wrapper/maven-wrapper.jar
 !.mvn/wrapper/maven-wrapper.properties

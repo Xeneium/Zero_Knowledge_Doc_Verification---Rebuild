@@ -9,6 +9,12 @@ import { ApiError } from '../../../lib/api/api-error';
 import { verifyPublicDocument } from '../api/verificationApi';
 import { QrScanner } from '../components/QrScanner';
 import { VerificationResultPanel } from '../components/VerificationResultPanel';
+import { PresentationDemoCard } from '../components/PresentationDemoCard';
+import {
+  isPresentationDemoToken,
+  PRESENTATION_DEMO_RESPONSE,
+  PRESENTATION_DEMO_URL,
+} from '../demo/presentationDemo';
 import {
   toVerificationResult,
   type VerificationResult,
@@ -21,7 +27,11 @@ import {
 type RequestState =
   | { status: 'idle' }
   | { status: 'submitting' }
-  | { status: 'success'; result: VerificationResult }
+  | {
+      status: 'success';
+      result: VerificationResult;
+      source: 'backend' | 'presentation-demo';
+    }
   | { status: 'error'; message: string };
 
 function verificationErrorMessage(error: unknown): string {
@@ -84,11 +94,21 @@ export function PublicVerificationPage() {
     setRequestState({ status: 'submitting' });
 
     try {
+      if (isPresentationDemoToken(token)) {
+        setRequestState({
+          status: 'success',
+          result: toVerificationResult(PRESENTATION_DEMO_RESPONSE),
+          source: 'presentation-demo',
+        });
+        return;
+      }
+
       const response = await verifyPublicDocument(token, controller.signal);
       if (sequence !== requestSequence.current) return;
       setRequestState({
         status: 'success',
         result: toVerificationResult(response),
+        source: 'backend',
       });
     } catch (error) {
       if (sequence !== requestSequence.current) return;
@@ -182,6 +202,10 @@ export function PublicVerificationPage() {
             </div>
           </form>
 
+          <PresentationDemoCard
+            onVerify={() => void executeVerification(PRESENTATION_DEMO_URL)}
+          />
+
           <div className="border-ink-200 mt-6 border-t pt-5">
             <h3 className="text-ink-800 text-sm font-semibold">
               What this public check reveals
@@ -223,7 +247,10 @@ export function PublicVerificationPage() {
           </Card>
         ) : null}
         {requestState.status === 'success' ? (
-          <VerificationResultPanel result={requestState.result} />
+          <VerificationResultPanel
+            result={requestState.result}
+            presentationDemo={requestState.source === 'presentation-demo'}
+          />
         ) : null}
         {requestState.status === 'error' ? (
           <Alert tone="danger" title="Unable to verify" className="p-5 sm:p-6">
