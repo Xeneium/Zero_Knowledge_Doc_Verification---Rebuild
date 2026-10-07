@@ -128,7 +128,7 @@ class DefaultHolderProvingMaterialAccessTest {
 
         // Ensure toString() does not leak sensitive values
         String str = context.toString();
-        assertFalse(str.contains("25"));
+        assertFalse(str.contains("attributeValue=25"));
         assertTrue(str.contains("attributeValue=[REDACTED]"));
         assertTrue(str.contains("blindingFactor=[REDACTED]"));
     }

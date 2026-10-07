@@ -1,5 +1,8 @@
 package com.zkdoc.api.zkp;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -215,6 +218,139 @@ class CredentialPredicateSecurityIntegrationTest {
         Fixture fixture = fixture(21L, 18L, CredentialStatus.ACTIVE, Instant.now().plusSeconds(3600));
         assertRejected(fixture.requestWith(
                 fixture.credentialId(), fixture.threshold(), new byte[] {99, 98, 97}, fixture.proofBytes()));
+    }
+
+    @Test
+    @DisplayName("reject — oversized proof bytes (>64KB) returns bad request")
+    void oversizedProofRejectsWithBadRequest() throws Exception {
+        Fixture fixture = fixture(21L, 18L, CredentialStatus.ACTIVE, Instant.now().plusSeconds(3600));
+        byte[] oversizedProof = new byte[65537];
+        mockMvc.perform(post("/api/v2/zkp/credential-predicates/verify")
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsBytes(fixture.requestWith(
+                                fixture.credentialId(), fixture.threshold(), fixture.nonce(), oversizedProof))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("reject — oversized nonce (>64 bytes) returns bad request")
+    void oversizedNonceRejectsWithBadRequest() throws Exception {
+        Fixture fixture = fixture(21L, 18L, CredentialStatus.ACTIVE, Instant.now().plusSeconds(3600));
+        byte[] oversizedNonce = new byte[65];
+        mockMvc.perform(post("/api/v2/zkp/credential-predicates/verify")
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsBytes(fixture.requestWith(
+                                fixture.credentialId(), fixture.threshold(), oversizedNonce, fixture.proofBytes()))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("reject — empty nonce returns bad request")
+    void emptyNonceRejectsWithBadRequest() throws Exception {
+        Fixture fixture = fixture(21L, 18L, CredentialStatus.ACTIVE, Instant.now().plusSeconds(3600));
+        byte[] emptyNonce = new byte[0];
+        mockMvc.perform(post("/api/v2/zkp/credential-predicates/verify")
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsBytes(fixture.requestWith(
+                                fixture.credentialId(), fixture.threshold(), emptyNonce, fixture.proofBytes()))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("reject — negative threshold returns bad request")
+    void negativeThresholdRejectsWithBadRequest() throws Exception {
+        Fixture fixture = fixture(21L, 18L, CredentialStatus.ACTIVE, Instant.now().plusSeconds(3600));
+        mockMvc.perform(post("/api/v2/zkp/credential-predicates/verify")
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsBytes(fixture.requestWith(
+                                fixture.credentialId(), -5L, fixture.nonce(), fixture.proofBytes()))))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("privacy safety: verification response never leaks attribute values, witness or blinders")
+    void verificationResponseDoesNotLeakSecrets() throws Exception {
+        Fixture fixture = fixture(25L, 18L, CredentialStatus.ACTIVE, Instant.now().plusSeconds(3600));
+        String responseContent = mockMvc.perform(post("/api/v2/zkp/credential-predicates/verify")
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsBytes(fixture.request())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.verified").value(true))
+                .andReturn().getResponse().getContentAsString();
+
+        // Ensure minimal disclosure
+        assertFalse(responseContent.contains("25"), "Response must not contain raw attribute value");
+        assertFalse(responseContent.contains("blinding"), "Response must not contain blinder information");
+        assertFalse(responseContent.contains("witness"), "Response must not contain witness information");
+        assertFalse(responseContent.contains("commitment"), "Response must not disclose commitment bytes");
+    }
+
+    @Test
+    @DisplayName("audit event integrity: records verification event with actor and outcome without leaking secrets")
+    void auditLoggingRecordsVerificationSafely() throws Exception {
+        Fixture fixture = fixture(21L, 18L, CredentialStatus.ACTIVE, Instant.now().plusSeconds(3600));
+        mockMvc.perform(post("/api/v2/zkp/credential-predicates/verify")
+                        .contentType("application/json")
+                        .content(objectMapper.writeValueAsBytes(fixture.request())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.verified").value(true));
+
+        List<java.util.Map<String, Object>> events = jdbcTemplate.queryForList(
+                "SELECT * FROM verification_audit_events WHERE credential_id = ?", fixture.credentialId().toString());
+
+        assertFalse(events.isEmpty(), "Audit event must be recorded for verification");
+        java.util.Map<String, Object> event = events.get(0);
+        assertEquals("verifier-test", event.get("actor_subject"));
+        assertEquals("CREDENTIAL_PREDICATE_VERIFY", event.get("event_type"));
+        assertEquals(1, ((Number) event.get("result")).intValue());
+    }
+
+    @Test
+    @DisplayName("concurrent verification requests maintain thread-safety and state isolation")
+    void concurrentVerificationsSucceed() throws Exception {
+        Fixture fixtureA = fixture(25L, 20L, CredentialStatus.ACTIVE, Instant.now().plusSeconds(3600));
+        Fixture fixtureB = fixture(30L, 18L, CredentialStatus.ACTIVE, Instant.now().plusSeconds(3600));
+
+        int threadCount = 6;
+        java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(threadCount);
+        java.util.concurrent.CountDownLatch startLatch = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch doneLatch = new java.util.concurrent.CountDownLatch(threadCount);
+        java.util.concurrent.atomic.AtomicInteger successCount = new java.util.concurrent.atomic.AtomicInteger(0);
+
+        for (int i = 0; i < threadCount; i++) {
+            final int index = i;
+            executor.submit(() -> {
+                try {
+                    org.springframework.security.core.context.SecurityContext context =
+                            org.springframework.security.core.context.SecurityContextHolder.createEmptyContext();
+                    context.setAuthentication(
+                            new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                                    "verifier-test", "password",
+                                    java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_VERIFIER"))));
+                    org.springframework.security.core.context.SecurityContextHolder.setContext(context);
+
+                    startLatch.await();
+                    PredicateRequest req = (index % 2 == 0) ? fixtureA.request() : fixtureB.request();
+                    mockMvc.perform(post("/api/v2/zkp/credential-predicates/verify")
+                                    .contentType("application/json")
+                                    .content(objectMapper.writeValueAsBytes(req)))
+                            .andExpect(status().isOk())
+                            .andExpect(jsonPath("$.verified").value(true));
+                    successCount.incrementAndGet();
+                } catch (Throwable e) {
+                    System.err.println("Concurrent verification worker error: " + e.getMessage());
+                } finally {
+                    org.springframework.security.core.context.SecurityContextHolder.clearContext();
+                    doneLatch.countDown();
+                }
+            });
+        }
+
+        startLatch.countDown();
+        doneLatch.await(15, java.util.concurrent.TimeUnit.SECONDS);
+        executor.shutdown();
+
+        org.junit.jupiter.api.Assertions.assertEquals(threadCount, successCount.get());
     }
 
     private Fixture fixture(long value, long threshold, CredentialStatus status, Instant expiresAt) throws Exception {

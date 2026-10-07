@@ -42,15 +42,40 @@ public class CredentialPredicateController {
         }
         try {
             PredicateVerificationRequest request = objectMapper.treeToValue(body, PredicateVerificationRequest.class);
+            validateRequestBounds(request);
             CredentialPredicateVerificationResult result = predicateVerifier.verify(
                     request.proofVersion(), request.credentialId(), request.attributeName(), request.threshold(),
                     request.nonce(), request.proofBytes());
             verificationAuditService.record(authentication, "CREDENTIAL_PREDICATE_VERIFY", request.credentialId(), null,
                     result.verified());
             return result;
-        } catch (JacksonException exception) {
+        } catch (JacksonException | IllegalArgumentException exception) {
             verificationAuditService.record(authentication, "CREDENTIAL_PREDICATE_VERIFY", null, null, false);
-            throw exception;
+            if (exception instanceof IllegalArgumentException) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage());
+            }
+            throw (JacksonException) exception;
+        }
+    }
+
+    private void validateRequestBounds(PredicateVerificationRequest request) {
+        if (request.proofVersion() == null || request.proofVersion().isBlank() || request.proofVersion().length() > 32) {
+            throw new IllegalArgumentException("Invalid proofVersion parameter");
+        }
+        if (request.credentialId() == null) {
+            throw new IllegalArgumentException("credentialId must not be null");
+        }
+        if (request.attributeName() == null || request.attributeName().isBlank() || request.attributeName().length() > 128) {
+            throw new IllegalArgumentException("Invalid attributeName parameter");
+        }
+        if (request.threshold() < 0) {
+            throw new IllegalArgumentException("threshold must be non-negative");
+        }
+        if (request.nonce() == null || request.nonce().length < 1 || request.nonce().length > 64) {
+            throw new IllegalArgumentException("nonce size must be between 1 and 64 bytes");
+        }
+        if (request.proofBytes() == null || request.proofBytes().length < 1 || request.proofBytes().length > 65536) {
+            throw new IllegalArgumentException("proofBytes size must be between 1 and 65536 bytes");
         }
     }
 

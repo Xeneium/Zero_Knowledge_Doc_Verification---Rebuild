@@ -71,6 +71,9 @@ dump.txt
 files.txt
 poms.txt
 scratch/
+test-reports/
+*.dump
+*.dumpstream
 
 # === Maven Wrapper ===
 !.mvn/wrapper/maven-wrapper.jar

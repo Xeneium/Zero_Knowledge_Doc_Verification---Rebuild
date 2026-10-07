@@ -15,7 +15,10 @@ import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWrite
 @EnableWebSecurity
 public class SecurityConfiguration {
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter)
+    SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            JwtAuthenticationFilter jwtAuthenticationFilter,
+            com.zkdoc.api.zkp.ZkpVerificationRateLimitFilter zkpVerificationRateLimitFilter)
             throws Exception {
         return http
                 .csrf(csrf -> csrf.disable())
@@ -32,7 +35,7 @@ public class SecurityConfiguration {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/api/health", "/actuator/health", "/actuator/health/**", "/actuator/info", "/api/public/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/documents", "/api/credentials").hasRole("ISSUER")
-                        .requestMatchers(HttpMethod.GET, "/api/documents/*/qr").hasRole("ISSUER")
+                        .requestMatchers("/api/capabilities/**").hasAnyRole("ISSUER", "HOLDER", "ADMIN")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/holder/**").hasAnyRole("HOLDER", "ADMIN")
                         .requestMatchers("/api/v2/zkp/credential-predicates/**").hasRole("VERIFIER")
@@ -40,6 +43,7 @@ public class SecurityConfiguration {
                         .hasAnyRole("ISSUER", "HOLDER", "VERIFIER", "ADMIN")
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().permitAll())
+                .addFilterBefore(zkpVerificationRateLimitFilter, UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
     }

@@ -14,4 +14,10 @@ public class DocumentExceptionHandler {
     public Map<String, String> documentNotFound(DocumentNotFoundException exception) {
         return Map.of("error", exception.getMessage());
     }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, String> illegalArgument(IllegalArgumentException exception) {
+        return Map.of("error", exception.getMessage());
+    }
 }

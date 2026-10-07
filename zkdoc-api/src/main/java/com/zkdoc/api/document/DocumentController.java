@@ -42,7 +42,8 @@ public class DocumentController {
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<UploadResponse> upload(@RequestParam("file") MultipartFile file) throws IOException {
-        DocumentRecord document = documentUploadService.upload(file.getBytes());
+        DocumentRecord document = documentUploadService.upload(
+                file.getBytes(), file.getOriginalFilename(), file.getContentType());
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(new UploadResponse(document.id(), HexFormat.of().formatHex(document.digest())));
     }
