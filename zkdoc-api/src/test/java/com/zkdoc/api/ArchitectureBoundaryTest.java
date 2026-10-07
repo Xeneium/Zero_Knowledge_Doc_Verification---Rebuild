@@ -56,4 +56,12 @@ class ArchitectureBoundaryTest {
                 .should().bePublic()
                 .check(importedClasses);
     }
+
+    @Test
+    @DisplayName("Architecture rule: Credential and document domain entities must not depend on Web controllers or servlets")
+    void domainMustNotDependOnWeb() {
+        noClasses().that().resideInAnyPackage("com.zkdoc.credential..", "com.zkdoc.document..")
+                .should().dependOnClassesThat().resideInAnyPackage("org.springframework.web..", "jakarta.servlet..")
+                .check(importedClasses);
+    }
 }

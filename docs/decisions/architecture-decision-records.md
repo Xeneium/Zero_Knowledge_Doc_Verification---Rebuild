@@ -195,3 +195,74 @@
 * **Alternatives Considered:** Logging to application console / log files only. Rejected due to difficulty querying and enforcing retention.
 * **Security Implications:** Tamper-evident audit trail without leaking private credential attributes or proving secrets.
 * **Consequences:** Audit service called asynchronously or inside verification transactions.
+
+---
+
+### ADR-017: Authoritative Domain Model & Strongly Typed Value Objects
+
+* **Context:** Primitives (`String`, `UUID`, `long`) when used directly across security-sensitive domain operations can be accidentally swapped, incorrectly validated, or mutated, causing cryptographic verification failures.
+* **Decision:** Establish strongly typed, immutable Value Objects (`CredentialId`, `IssuerId`, `KeyId`, `AttributeName`, `AttributeValue`, `Digest`, `CredentialVersion`, `CanonicalizationVersion`, `DocumentId`, `ArtifactId`) enforcing non-nullness, string patterns, normalization, and bounds at instantiation time.
+* **Alternatives Considered:** Raw Java standard types throughout the domain. Rejected due to type confusion and scattered validation logic.
+* **Security Implications:** Invariants are guaranteed by construction; invalid identifiers or malformed attributes cannot reach cryptographic pipelines.
+* **Consequences:** Domain models use dedicated types with explicit factory methods.
+
+---
+
+### ADR-018: Explicit Attribute Type Hierarchy & Commitment Eligibility
+
+* **Context:** ZKP range proofs and Pedersen commitments require 64-bit numeric scalar inputs, whereas general credential claims can be arbitrary strings, booleans, or dates.
+* **Decision:** Explicitly type attributes (`INTEGER`, `STRING`, `BOOLEAN`, `DATE`, `DATE_TIME`, `IDENTIFIER`) and restrict commitment and predicate proof eligibility strictly to `INTEGER` attributes ($v \in [0, 2^{63}-1]$).
+* **Alternatives Considered:** Untyped `Map<String, Object>` or stringifying all values. Rejected because untyped maps create cryptographic ambiguity and cannot be safely converted to scalar points.
+* **Security Implications:** Prevents type-confusion attacks and mathematical failures during elliptic curve point multiplication.
+* **Consequences:** Attempting to commit non-INTEGER attributes is rejected at the domain validation boundary.
+
+---
+
+### ADR-019: Deterministic Binary Canonicalization Protocol (`zkdoc-canonical-v1`)
+
+* **Context:** Cryptographic signatures require identical byte sequences across different platforms, architectures, and JVM runtimes. JSON serialization is vulnerable to field reordering, whitespace variance, and floating point divergence.
+* **Decision:** Implement a deterministic binary encoding protocol with a 4-byte magic header (`ZKDC`), 2-byte version (`0x00 0x01`), big-endian integers, length-prefixed NFC UTF-8 strings, and ascending lexicographical attribute sorting.
+* **Alternatives Considered:** Canonical JSON (RFC 8785) or Java Serialization. Rejected because binary frames are more performant, zero-overhead, completely immune to JSON library upgrade differences, and eliminate Java serialization gadget vulnerabilities.
+* **Security Implications:** Bit-exact reproducibility and complete protection against serialization malleability attacks.
+* **Consequences:** All credentials canonicalize using `CanonicalCredentialEncoder` prior to digital signing or hashing.
+
+---
+
+### ADR-020: Operational Lifecycle Decoupling from Canonical Cryptographic Payload
+
+* **Context:** A verifiable credential has both cryptographic validity (signature over authentic claims) and operational lifecycle status (`ACTIVE`, `SUSPENDED`, `REVOKED`, `EXPIRED`). Including mutable status inside the signed bytes means that revoking or suspending a credential invalidates the issuer's original signature.
+* **Decision:** Exclude operational `CredentialStatus` from the canonical binary payload. The digital signature covers only permanent claims and validity timestamps; status transitions are tracked in the database and evaluated at verification time.
+* **Alternatives Considered:** Signing status inside the credential payload. Rejected because revocation would require generating a new digital signature or tampering with the original evidence.
+* **Security Implications:** Digital signatures remain permanent historical proof of issuance, while revocation can be administratively executed without cryptographic invalidation.
+* **Consequences:** Verification logic independently verifies both signature authenticity and active operational status.
+
+---
+
+### ADR-021: Separation of Document Identity from Physical Storage Artifacts
+
+* **Context:** Digital documents frequently exist in multiple representations (e.g. original upload, compressed archive, signed PDF) and storing raw binary content in database rows causes severe table bloat.
+* **Decision:** Decouple document domain identity (`Document`) from physical file representations (`DocumentArtifact`). Raw bytes are stored in private object storage; database records retain only SHA-256 digests, RSA signatures, metadata, and storage keys.
+* **Alternatives Considered:** Storing binary files directly in PostgreSQL `BYTEA` columns. Rejected due to scaling, backup, and memory limits.
+* **Security Implications:** High-performance relational queries; document tampering is detected on every read by verifying the content's SHA-256 digest against the signed database record.
+* **Consequences:** Application services interact with metadata and storage keys, with separate artifact version tracking.
+
+---
+
+### ADR-022: Relational Persistence Boundary and Explicit Object-Relational Mapping
+
+* **Context:** Directly exposing relational entities (JPA/Hibernate or JDBC entities) to cryptographic engines creates tight coupling to database column names, types, and retrieval order.
+* **Decision:** Establish an explicit persistence boundary where JDBC repositories map between relational database tables and pure immutable domain records without exposing database models to cryptographic or API layers.
+* **Alternatives Considered:** Using JPA entities as cryptographic payloads. Rejected due to dirty tracking proxies, lazy loading, and unstable reflection serialization.
+* **Security Implications:** Clean architectural separation ensures database schema evolution does not alter cryptographic hashes or signature verification.
+* **Consequences:** Mappers are explicitly implemented in `JdbcCredentialStore`, `JdbcIssuerStore`, and `JdbcArtifactStore`.
+
+---
+
+### ADR-023: Strict Unicode Normalization (NFC) and Lexicographical Sorting
+
+* **Context:** Unicode characters can have visually indistinguishable representations with different byte encodings (e.g., precomposed `é` vs decomposed `e` + combining acute accent), which causes signature verification failure if representations diverge between issuance and verification.
+* **Decision:** Mandate Unicode Normalization Form C (`Normalizer.Form.NFC`) on all string attribute names, values, schema URIs, and issuer IDs, and sort all attributes lexicographically by their UTF-8 byte arrays before writing binary frames.
+* **Alternatives Considered:** Default JVM String comparison or raw character order. Rejected due to locale dependencies and Unicode normalization discrepancies.
+* **Security Implications:** Immunizes the platform against Unicode decomposition spoofing and ensures deterministic byte ordering across all platforms.
+* **Consequences:** `CanonicalCredentialEncoder` normalizes all strings and enforces strict UTF-8 byte comparison.
+

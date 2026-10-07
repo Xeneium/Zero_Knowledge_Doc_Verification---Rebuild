@@ -37,6 +37,9 @@ class PostgresFlywayMigrationIntegrationTest extends AbstractPostgresIntegration
         assertTrue(tables.contains("attribute_commitments"), "attribute_commitments table must exist");
         assertTrue(tables.contains("verification_sessions"), "verification_sessions table must exist");
         assertTrue(tables.contains("verification_audit_events"), "verification_audit_events table must exist");
+        assertTrue(tables.contains("issuers"), "issuers table must exist");
+        assertTrue(tables.contains("credential_attributes"), "credential_attributes table must exist");
+        assertTrue(tables.contains("document_artifacts"), "document_artifacts table must exist");
         assertTrue(tables.contains("flyway_schema_history"), "flyway_schema_history table must exist");
     }
 }

@@ -30,7 +30,8 @@ public class CredentialController {
     }
 
     @PostMapping
-    public ResponseEntity<IssueCredentialResponse> issue(@RequestBody Credential credential) {
+    public ResponseEntity<IssueCredentialResponse> issue(@RequestBody IssueCredentialRequest request) {
+        Credential credential = request.toDomain();
         SignedCredential issued = credentialService.issue(credential);
         return ResponseEntity.status(HttpStatus.CREATED).body(
                 new IssueCredentialResponse(issued.credential().credentialId(), HexFormat.of().formatHex(issued.digest())));
