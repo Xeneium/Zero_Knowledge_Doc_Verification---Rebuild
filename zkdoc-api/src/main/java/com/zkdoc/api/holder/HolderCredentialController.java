@@ -32,12 +32,15 @@ public class HolderCredentialController {
 
     private final HolderCredentialService holderCredentialService;
     private final VerificationAuditService auditService;
+    private final com.zkdoc.zkp.holder.PredicateProofGenerationService proofGenerationService;
 
     public HolderCredentialController(
             HolderCredentialService holderCredentialService,
-            VerificationAuditService auditService) {
+            VerificationAuditService auditService,
+            com.zkdoc.zkp.holder.PredicateProofGenerationService proofGenerationService) {
         this.holderCredentialService = holderCredentialService;
         this.auditService = auditService;
+        this.proofGenerationService = proofGenerationService;
     }
 
     @PostMapping("/provision")
@@ -107,6 +110,86 @@ public class HolderCredentialController {
         HolderCredential hc = holderCredentialService.revoke(HolderCredentialId.of(id), holderId);
         auditService.record(authentication, "HOLDER_CREDENTIAL_REVOKED", id, null, true);
         return toResponse(hc);
+    }
+
+    @PostMapping("/proofs/generate")
+    @PreAuthorize("hasRole('HOLDER') or hasRole('ADMIN')")
+    public ResponseEntity<HolderPredicateProofResponse> generateProof(
+            @RequestBody GeneratePredicateProofRequest request,
+            Authentication authentication) {
+        String subject = authentication != null ? authentication.getName() : "anonymous";
+        HolderId holderId = HolderId.of(subject);
+
+        if (request.holderCredentialId() == null || request.attributeName() == null || request.attributeName().isBlank()) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "holderCredentialId and attributeName must not be empty");
+        }
+        if (request.threshold() < 0) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "threshold must be non-negative");
+        }
+
+        byte[] nonceBytes;
+        if (request.nonceHex() == null || request.nonceHex().isBlank()) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "nonceHex must not be empty");
+        }
+        try {
+            nonceBytes = HexFormat.of().parseHex(request.nonceHex());
+        } catch (IllegalArgumentException e) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "nonceHex must be valid hex", e);
+        }
+
+        com.zkdoc.zkp.engine.PredicateOperator op = com.zkdoc.zkp.engine.PredicateOperator.GREATER_THAN_OR_EQUAL;
+        if (request.operator() != null && !request.operator().isBlank() && !">=".equals(request.operator()) && !"GREATER_THAN_OR_EQUAL".equalsIgnoreCase(request.operator())) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Unsupported predicate operator: " + request.operator());
+        }
+
+        com.zkdoc.zkp.holder.HolderPredicateProofRequest proofReq = new com.zkdoc.zkp.holder.HolderPredicateProofRequest(
+                HolderCredentialId.of(request.holderCredentialId()),
+                request.attributeName(),
+                op,
+                request.threshold(),
+                nonceBytes
+        );
+
+        try {
+            com.zkdoc.zkp.holder.HolderPredicateProof proof = proofGenerationService.generateProof(holderId, proofReq);
+            auditService.record(authentication, "HOLDER_PREDICATE_PROOF_GENERATED",
+                    proof.statement().credentialId().value(), null, true);
+
+            HolderPredicateProofResponse resp = new HolderPredicateProofResponse(
+                    proof.statement().holderCredentialId().value(),
+                    proof.statement().credentialId().value(),
+                    HexFormat.of().formatHex(proof.statement().credentialDigest()),
+                    proof.statement().predicate().attributeName(),
+                    proof.statement().predicate().operator().symbol(),
+                    proof.statement().predicate().threshold(),
+                    HexFormat.of().formatHex(proof.statement().commitmentPoint()),
+                    HexFormat.of().formatHex(proof.statement().attestationSignature()),
+                    proof.statement().attestationKeyId(),
+                    HexFormat.of().formatHex(proof.statement().transcriptNonce()),
+                    proof.proofArtifact().proofVersion(),
+                    proof.proofArtifact().bitSize(),
+                    HexFormat.of().formatHex(proof.proofArtifact().proofBytes())
+            );
+
+            return ResponseEntity.ok(resp);
+        } catch (com.zkdoc.credential.HolderCredentialNotFoundException e) {
+            auditService.record(authentication, "HOLDER_PREDICATE_PROOF_GENERATE_FAILED",
+                    null, null, false);
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
+        } catch (IllegalArgumentException e) {
+            auditService.record(authentication, "HOLDER_PREDICATE_PROOF_GENERATE_FAILED",
+                    null, null, false);
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        } catch (IllegalStateException e) {
+            auditService.record(authentication, "HOLDER_PREDICATE_PROOF_GENERATE_FAILED",
+                    null, null, false);
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
+        }
     }
 
     private HolderCredentialResponse toResponse(HolderCredential hc) {
