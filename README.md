@@ -1,6 +1,6 @@
-# zkdoc-platform
+# Zero Knowledge Document Verification
 
-`zkdoc-platform` is a Java 26, Spring Boot 4.1.1 multi-module foundation for zero-knowledge document and credential verification. It uses a local SQLite database only; PostgreSQL and Docker are not required or configured.
+`Zero Knowledge Document Verification` (`zkdoc-platform`) is a Java 21, Spring Boot multi-module foundation for zero-knowledge document and credential verification. It uses an enterprise-grade cryptographic architecture featuring Pedersen commitments, Bulletproof range proofs, RSASSA-PSS digital signatures, and minimal-disclosure verification capabilities.
 
 ## Modules
 
