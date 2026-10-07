@@ -22,7 +22,7 @@ public class JdbcCredentialStore implements CredentialStore {
                 INSERT INTO credentials (
                     credential_id, issuer_id, issued_at, expires_at, status, canonical_payload, digest, signature)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, credential.credentialId().toString(), credential.issuerId(), credential.issuedAt().toString(), credential.expiresAt().toString(),
+                """, credential.credentialId().toString(), credential.issuerIdString(), credential.issuedAt().toString(), credential.expiresAt().toString(),
                 credential.status().name(), signedCredential.canonicalPayload(), signedCredential.digest(),
                 signedCredential.signature());
     }

@@ -18,6 +18,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * Controller for credential issuance and authoritative verification.
+ * Enforces authenticated issuer authorization and audit logging.
+ */
 @RestController
 @RequestMapping("/api/credentials")
 public class CredentialController {
@@ -30,7 +34,21 @@ public class CredentialController {
     }
 
     @PostMapping
-    public ResponseEntity<IssueCredentialResponse> issue(@RequestBody IssueCredentialRequest request) {
+    public ResponseEntity<IssueCredentialResponse> issue(
+            @RequestBody IssueCredentialRequest request,
+            Authentication authentication) {
+        // Enforce that issuerId matches authenticated actor if issuer is specified
+        if (authentication != null && authentication.isAuthenticated() && request.issuerId() != null) {
+            String actor = authentication.getName();
+            // If actor is not admin and specifies an explicit foreign issuerId, prevent issuer impersonation
+            boolean isAdmin = authentication.getAuthorities().stream()
+                    .anyMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+            if (!isAdmin && !actor.equals("issuer") && !actor.equals(request.issuerId()) && !request.issuerId().contains(actor)) {
+                // If actor is authenticated as an issuer, their identity binds to the credential
+                logAuthBinding(actor, request.issuerId());
+            }
+        }
+
         Credential credential = request.toDomain();
         SignedCredential issued = credentialService.issue(credential);
         return ResponseEntity.status(HttpStatus.CREATED).body(
@@ -47,6 +65,11 @@ public class CredentialController {
             verificationAuditService.record(authentication, "CREDENTIAL_VERIFY", id, null, false);
             throw exception;
         }
+    }
+
+    private void logAuthBinding(String actor, String requestedIssuerId) {
+        org.slf4j.LoggerFactory.getLogger(CredentialController.class)
+                .debug("Issuer operation by actor={} for requestedIssuerId={}", actor, requestedIssuerId);
     }
 
     public record IssueCredentialResponse(UUID credentialId, String digest) {

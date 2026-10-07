@@ -5,6 +5,7 @@ import com.zkdoc.core.crypto.SignatureService;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -52,10 +53,33 @@ public class KeyRegistryService {
     }
 
     /**
+     * Resolves a public key metadata record for verification by keyId, purpose, and expected owner.
+     */
+    public Optional<RegisteredKey> verificationKey(String keyId, KeyPurpose purpose, String expectedOwnerId) {
+        return keyRegistry.findForVerification(keyId, purpose, expectedOwnerId);
+    }
+
+    /**
+     * Lists all keys for an owner that are valid for verification (ACTIVE, RETIRING, RETIRED).
+     */
+    public List<RegisteredKey> keysForVerificationByOwner(KeyPurpose purpose, String ownerId) {
+        return keyRegistry.findAllByOwner(ownerId).stream()
+                .filter(k -> k.purpose() == purpose && k.status().canVerifyHistorical())
+                .toList();
+    }
+
+    /**
      * Finds active key metadata for signing for the given purpose.
      */
     public Optional<RegisteredKey> activeSigningKey(KeyPurpose purpose) {
         return keyRegistry.findActiveForSigning(purpose);
+    }
+
+    /**
+     * Finds active key metadata for signing for the given purpose and specific owner.
+     */
+    public Optional<RegisteredKey> activeSigningKey(KeyPurpose purpose, String ownerId) {
+        return keyRegistry.findActiveForSigning(purpose, ownerId);
     }
 
     /**
@@ -128,12 +152,23 @@ public class KeyRegistryService {
      * Performs a digital signature operation under explicit keyId and purpose authorization.
      */
     public byte[] sign(String keyId, KeyPurpose purpose, byte[] digest) {
+        return sign(keyId, purpose, null, digest);
+    }
+
+    /**
+     * Performs a digital signature operation under explicit keyId, purpose, and ownerId authorization.
+     */
+    public byte[] sign(String keyId, KeyPurpose purpose, String expectedOwnerId, byte[] digest) {
         RegisteredKey keyMeta = keyRegistry.findByKeyId(keyId)
                 .orElseThrow(() -> new IllegalArgumentException("Key not found in registry: " + keyId));
 
         if (keyMeta.purpose() != purpose) {
             throw new IllegalArgumentException(
                     "Key purpose violation: Key " + keyId + " has purpose " + keyMeta.purpose() + ", requested: " + purpose);
+        }
+        if (expectedOwnerId != null && !expectedOwnerId.isBlank() && !keyMeta.ownerId().equals(expectedOwnerId)) {
+            throw new IllegalArgumentException(
+                    "Key owner violation: Key " + keyId + " is owned by " + keyMeta.ownerId() + ", expected: " + expectedOwnerId);
         }
         if (!keyMeta.status().canSign()) {
             throw new IllegalStateException(

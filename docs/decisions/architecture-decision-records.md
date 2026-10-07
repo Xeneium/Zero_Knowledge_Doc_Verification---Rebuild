@@ -340,3 +340,52 @@
 * **Alternatives Considered:** Relying solely on application logging or updating mutable columns in `key_registry`. Rejected because mutable records do not preserve transition history.
 * **Security Implications:** Non-repudiable audit log enabling security forensics in the event of suspected key compromise or unauthorized rotation.
 * **Consequences:** `KeyRegistryService` publishes immutable audit events on every lifecycle state transition.
+
+---
+
+### ADR-031: Pure Deterministic Canonical Verification Invariant
+* **Context:** In naive implementations, verifiers trust a database column (such as `signed = true` or `verified = 1`) or verify signatures against transient in-memory objects rather than stored canonical bytes.
+* **Decision:** Mandate that credential verification MUST recompute the SHA-256 digest directly from the persisted `canonical_payload` bytes, re-decode the canonical binary payload using `CanonicalCredentialDecoder`, and verify the RSASSA-PSS signature against the reconstructed claim hash.
+* **Security Implications:** Eliminates database tampering attacks, guarantees that payload changes immediately invalidate signatures, and ensures verifiers are mathematically coupled to the exact bytes signed by the issuer.
+* **Consequences:** `CredentialService.verify` operates exclusively on reconstructed canonical bytes.
+
+---
+
+### ADR-032: Issuer Authority & Operational Status Enforcement in Issuance Chain
+* **Context:** A revoked or suspended issuing authority could continue issuing or having its previously issued credentials treated as valid if verification only checked key math.
+* **Decision:** Bind credential verification to the authoritative `IssuerStore`. If an issuer is `SUSPENDED` or `REVOKED`, credential verification fails closed regardless of whether the cryptographic key signature is valid.
+* **Security Implications:** Prevents unauthorized issuance by rogue or compromised authorities and ensures administrative sanctions immediately take effect across all issued credentials.
+* **Consequences:** `CredentialService` queries `IssuerStore` during both issuance and verification.
+
+---
+
+### ADR-033: Strict Owner-Bound Key Custody Signing
+* **Context:** If a signing key ID could be passed without validating its owner, Issuer A could invoke a signing key registered to Issuer B, forging valid credentials under another entity's key.
+* **Decision:** Enforce in `KeyRegistryService.sign` that the requesting issuer identity (`expectedOwnerId`) strictly matches the registered `ownerId` of the key, and that the key's purpose is strictly `CREDENTIAL_SIGNING`.
+* **Security Implications:** Blocks cross-tenant key impersonation and privilege escalation in multi-issuer environments.
+* **Consequences:** Signing requests must provide explicit owner identity and will fail closed if an owner mismatch occurs.
+
+---
+
+### ADR-034: Historical Key Resolution & Revocation Fallback Policy
+* **Context:** When an issuer rotates signing keys annually, previously issued credentials must remain verifiable using retired keys, while compromised keys that are revoked must immediately fail closed.
+* **Decision:** When verifying historical credentials, `CredentialService` utilizes `KeyRegistryService.verifyHistorical` which allows `RETIRED` keys if the credential was issued prior to retirement/revocation, but unconditionally rejects `REVOKED` keys.
+* **Security Implications:** Maintains long-term verifiability of legitimately issued historical records while ensuring immediate fail-closed invalidation for compromised credentials.
+* **Consequences:** Keys in `RETIRING` and `RETIRED` states participate in verification but cannot sign new credentials.
+
+---
+
+### ADR-035: Granular Structured Verification Result Model
+* **Context:** Returning a simple boolean `verified: true/false` obscures whether a failure was caused by canonical payload tampering, signature corruption, key revocation, issuer suspension, or credential expiration.
+* **Decision:** Enhance `CredentialVerificationResult` into a rich, structured record containing independent boolean trust indicators: `digestMatches`, `signatureValid`, `issuerActive`, `keyTrusted`, `operationalStatusValid`, and a diagnostic `failureReason`.
+* **Security Implications:** Enables verifiers and automated security auditors to diagnose exact failure points and distinguish between malicious forgery attempts and routine expiration.
+* **Consequences:** Verification responses provide transparent cryptographic and lifecycle diagnostics.
+
+---
+
+### ADR-036: Strict Separation of Issuance DTOs and In-Memory Domain Model
+* **Context:** Exposing internal domain constructors directly on REST controllers risks parameter injection, unvalidated timestamps, and forged status fields.
+* **Decision:** Maintain `IssueCredentialRequest` as a transport DTO that maps into `CredentialDraft`, while `CredentialController` validates the authenticated caller's identity against the requested `issuerId`.
+* **Security Implications:** Prevents unauthorized principals from forging credentials under other issuer identities or setting inappropriate initial lifecycle states.
+* **Consequences:** Credential creation is mediated through validated draft builders and security filters.
+

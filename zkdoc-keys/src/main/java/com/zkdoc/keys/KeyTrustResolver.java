@@ -84,11 +84,19 @@ public class KeyTrustResolver {
      * Resolves key metadata for an active signing operation.
      */
     public Optional<RegisteredKey> resolveSigningKeyMetadata(String keyId, KeyPurpose purpose) {
+        return resolveSigningKeyMetadata(keyId, purpose, null);
+    }
+
+    /**
+     * Resolves key metadata for an active signing operation with owner check.
+     */
+    public Optional<RegisteredKey> resolveSigningKeyMetadata(String keyId, KeyPurpose purpose, String expectedOwnerId) {
         if (keyId == null || purpose == null) {
             return Optional.empty();
         }
         return keyRegistry.findByKeyId(keyId)
                 .filter(k -> k.purpose() == purpose)
-                .filter(k -> k.status().canSign());
+                .filter(k -> k.status().canSign())
+                .filter(k -> expectedOwnerId == null || expectedOwnerId.isBlank() || k.ownerId().equals(expectedOwnerId));
     }
 }
