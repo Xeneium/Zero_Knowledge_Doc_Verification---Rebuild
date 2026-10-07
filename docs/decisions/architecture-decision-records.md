@@ -266,3 +266,77 @@
 * **Security Implications:** Immunizes the platform against Unicode decomposition spoofing and ensures deterministic byte ordering across all platforms.
 * **Consequences:** `CanonicalCredentialEncoder` normalizes all strings and enforces strict UTF-8 byte comparison.
 
+
+---
+
+### ADR-024: Cryptographic Key Purpose Separation & Purpose Confusion Prevention
+
+* **Context:** A single cryptographic key pair used across multiple semantic operations creates dangerous cryptographic vulnerabilities (e.g., using a JWT signing key to sign a credential, or using a document key to sign an attribute commitment).
+* **Decision:** Enforce four strictly distinct and non-overlapping `KeyPurpose` types: `JWT_SIGNING`, `CREDENTIAL_SIGNING`, `DOCUMENT_SIGNING`, and `COMMITMENT_ATTESTATION_SIGNING`. Cryptographic operations must validate that the key's registered purpose strictly matches the operation before signing or verification.
+* **Alternatives Considered:** Generic multi-purpose keys (`ALL`, `SIGNING`). Rejected due to cross-protocol forgery attacks and lack of isolation.
+* **Security Implications:** Eliminates cross-purpose signature forgery and ensures cryptographic operations remain confined to their intended domain.
+* **Consequences:** All keys in `key_registry` are bound to exactly one purpose; any mismatch triggers an immediate fail-closed security exception.
+
+---
+
+### ADR-025: Four-State Key Lifecycle & Distinction Between Retirement and Revocation
+
+* **Context:** Cryptographic key turnover must differentiate between scheduled key rotation and emergency key compromise. If retired keys are treated as revoked, historical documents and credentials become unverifiable.
+* **Decision:** Implement a strict four-state key lifecycle: `ACTIVE`, `RETIRING`, `RETIRED`, and `REVOKED`. 
+  - `ACTIVE`: Key is valid for both new signing operations and signature verification.
+  - `RETIRING`: Key is undergoing scheduled phase-out; signing is restricted.
+  - `RETIRED`: Signing is strictly prohibited; historical signature verification is fully permitted.
+  - `REVOKED`: Key is compromised or permanently invalidated; signing is prohibited and historical verification fails closed.
+* **Alternatives Considered:** Binary key status (`ACTIVE` / `INACTIVE`). Rejected because it conflates routine retirement with security compromise.
+* **Security Implications:** Guarantees auditability and non-repudiation for historically valid credentials while immediately disabling compromised keys.
+* **Consequences:** Key status transitions are strictly governed (`ACTIVE` -> `RETIRING` -> `RETIRED`, `ACTIVE`/`RETIRING`/`RETIRED` -> `REVOKED`), and `REVOKED` is terminal.
+
+---
+
+### ADR-026: Public Key Trust Registry & Contextual Resolution Policy
+
+* **Context:** Verifying signatures solely based on a `keyId` header allows an attacker to supply their own key ID or register an arbitrary public key and forge signatures.
+* **Decision:** Establish a centralized `KeyTrustResolver` that resolves trusted public keys only when all contextual constraints match: `keyId`, `expectedPurpose`, `expectedOwnerId`, and verification timestamp. A key ID alone does not confer trust.
+* **Alternatives Considered:** Blind lookup by `keyId` without owner or purpose validation. Rejected as insecure.
+* **Security Implications:** Protects against key substitution attacks, cross-tenant impersonation, and expired/unauthorized key verification.
+* **Consequences:** All signature verification workflows must provide the expected owner and operational purpose when resolving public keys.
+
+---
+
+### ADR-027: Private-Key Custody Decoupling & Elimination of Constructor Key Generation
+
+* **Context:** Generating ephemeral RSA keypairs inside service constructors or storing private keys in domain records causes credential invalidation on restart, key leakage in memory dumps, and inability to integrate with HSM / KMS.
+* **Decision:** Prohibit private keys from ever entering domain entities (`RegisteredKey` stores only public key PEM, DER, and fingerprint). Separate private-key custody behind the `SigningKeyProvider` SPI. Provide `DevelopmentSigningKeyProvider` for test/dev with automated keypair consistency checks, while production relies on KMS/Vault.
+* **Alternatives Considered:** Embedding `PrivateKey` objects directly in `RegisteredKey` or database columns. Rejected due to extreme security risk.
+* **Security Implications:** Prevents private key leakage, guarantees key persistence across application restarts, and enables zero-trust KMS integration.
+* **Consequences:** Signing services obtain private keys exclusively through the custody provider, which fails closed if the private key does not match the registered public key.
+
+---
+
+### ADR-028: Standard RSASSA-PSS (RFC 8017) Cryptographic Baseline
+
+* **Context:** Legacy RSA PKCS#1 v1.5 padding is vulnerable to Bleichenbacher-style padding oracle attacks and lack of provable security.
+* **Decision:** Mandate RFC 8017 RSASSA-PSS with SHA-256 digest, MGF1 with SHA-256 mask generation, 32-byte salt, trailer field 1, and a minimum key size of 2048 bits (recommending 3072+ bits).
+* **Alternatives Considered:** RSA PKCS#1 v1.5 or raw RSA. Rejected due to cryptographic vulnerabilities and lack of modern regulatory compliance.
+* **Security Implications:** Provably secure digital signatures resistant to padding oracle and chosen-ciphertext attacks.
+* **Consequences:** All RSA signature generation and verification across `zkdoc-core-crypto`, `zkdoc-document`, and `zkdoc-credential` use `RsaPssSignatureService`.
+
+---
+
+### ADR-029: SHA-256 Key Fingerprinting over X.509 DER SubjectPublicKeyInfo
+
+* **Context:** Identifying and comparing public keys via formatted PEM strings or custom encodings is fragile and vulnerable to formatting discrepancies (e.g. CRLF vs LF, header differences).
+* **Decision:** Compute key fingerprints deterministically as lowercase hexadecimal `SHA-256(derBytes)` over standard ASN.1 X.509 `SubjectPublicKeyInfo` DER encoding.
+* **Alternatives Considered:** Fingerprinting over PEM strings or raw modulus bytes. Rejected due to formatting variance and lack of algorithm parameters.
+* **Security Implications:** Canonical, collision-resistant public key identification and instant duplicate detection in database indexes.
+* **Consequences:** `KeyFingerprint` computes the fingerprint automatically whenever a public key is registered or parsed.
+
+---
+
+### ADR-030: Append-Only Cryptographic Key Lifecycle Audit Trail
+
+* **Context:** Regulatory compliance and security monitoring require a complete, immutable record of every key lifecycle event (registration, activation, retirement, rotation, revocation).
+* **Decision:** Implement dedicated append-only tables (`key_lifecycle_audit_events`) in PostgreSQL (V3) and SQLite (V8) recording event type, key ID, purpose, owner, actor, result, and timestamp.
+* **Alternatives Considered:** Relying solely on application logging or updating mutable columns in `key_registry`. Rejected because mutable records do not preserve transition history.
+* **Security Implications:** Non-repudiable audit log enabling security forensics in the event of suspected key compromise or unauthorized rotation.
+* **Consequences:** `KeyRegistryService` publishes immutable audit events on every lifecycle state transition.

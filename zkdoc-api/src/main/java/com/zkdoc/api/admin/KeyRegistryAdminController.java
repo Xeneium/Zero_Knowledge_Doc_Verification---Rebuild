@@ -1,12 +1,19 @@
 package com.zkdoc.api.admin;
 
+import com.zkdoc.keys.KeyAlgorithmPolicy;
+import com.zkdoc.keys.KeyFingerprint;
+import com.zkdoc.keys.KeyOwnerType;
 import com.zkdoc.keys.KeyPurpose;
+import com.zkdoc.keys.KeyRegistry;
 import com.zkdoc.keys.KeyRegistryService;
 import com.zkdoc.keys.KeyStatus;
 import com.zkdoc.keys.RegisteredKey;
+import java.time.Instant;
+import java.util.Collections;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -14,27 +21,94 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** ADMIN-only API. It registers public-key metadata; private key material is never accepted. */
+/**
+ * ADMIN-only API for cryptographic trust registry operations.
+ * Manages public-key trust anchors and lifecycle states;
+ * private key material is never accepted, processed, or returned.
+ */
 @RestController
 @RequestMapping("/api/admin/keys")
 public class KeyRegistryAdminController {
-    private final KeyRegistryService keyRegistryService;
 
-    public KeyRegistryAdminController(KeyRegistryService keyRegistryService) {
+    private final KeyRegistryService keyRegistryService;
+    private final KeyRegistry keyRegistry;
+
+    public KeyRegistryAdminController(KeyRegistryService keyRegistryService, KeyRegistry keyRegistry) {
         this.keyRegistryService = keyRegistryService;
+        this.keyRegistry = keyRegistry;
     }
 
     @PostMapping
     public ResponseEntity<KeyRegisteredResponse> register(@RequestBody KeyRegistrationRequest request) {
-        RegisteredKey key = new RegisteredKey(UUID.randomUUID(), request.keyId(), request.purpose(), request.status(),
-                request.algorithm(), request.publicKeyPem(), request.privateKeyFileEnvironment());
+        byte[] der = RegisteredKey.decodePemToDer(request.publicKeyPem());
+        String fingerprint = KeyFingerprint.fromDer(der).value();
+        Instant now = Instant.now();
+
+        String ownerId = request.ownerId() != null && !request.ownerId().isBlank() ? request.ownerId() : "platform";
+        KeyOwnerType ownerType = request.ownerType() != null ? request.ownerType() : KeyOwnerType.PLATFORM;
+        String algorithm = request.algorithm() != null ? request.algorithm() : KeyAlgorithmPolicy.MANDATED_ALGORITHM;
+        KeyStatus status = request.status() != null ? request.status() : KeyStatus.ACTIVE;
+
+        RegisteredKey key = new RegisteredKey(
+                UUID.randomUUID(),
+                request.keyId(),
+                request.purpose(),
+                status,
+                algorithm,
+                KeyAlgorithmPolicy.MANDATED_PARAMETERS,
+                ownerId,
+                ownerType,
+                request.publicKeyPem(),
+                der,
+                "X.509/PEM",
+                fingerprint,
+                now,
+                status == KeyStatus.ACTIVE ? now : null,
+                null,
+                null,
+                null,
+                null,
+                1,
+                Collections.emptyMap());
+
         keyRegistryService.register(key);
         return ResponseEntity.status(HttpStatus.CREATED).body(new KeyRegisteredResponse(key.id(), key.keyId()));
     }
 
+    @GetMapping("/{keyId}")
+    public ResponseEntity<KeyMetadataResponse> getKeyMetadata(@PathVariable String keyId) {
+        return keyRegistry.findByKeyId(keyId)
+                .map(k -> ResponseEntity.ok(new KeyMetadataResponse(
+                        k.id(),
+                        k.keyId(),
+                        k.purpose(),
+                        k.status(),
+                        k.ownerId(),
+                        k.ownerType(),
+                        k.algorithm(),
+                        k.fingerprint(),
+                        k.publicKeyPem(),
+                        k.createdAt(),
+                        k.activatedAt(),
+                        k.retiredAt(),
+                        k.revokedAt(),
+                        k.replacementKeyId())))
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
     @PatchMapping("/{keyId}/status")
-    public ResponseEntity<Void> changeStatus(@PathVariable String keyId, @RequestBody KeyStatusChangeRequest request) {
-        keyRegistryService.updateStatus(keyId, request.status());
+    public ResponseEntity<Void> changeStatus(
+            @PathVariable String keyId,
+            @RequestBody KeyStatusChangeRequest request) {
+        keyRegistryService.updateStatus(keyId, request.status(), request.reason(), request.replacementKeyId());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{keyId}/rotate")
+    public ResponseEntity<Void> rotateKey(
+            @PathVariable String keyId,
+            @RequestBody KeyRotateRequest request) {
+        keyRegistryService.rotateKey(keyId, request.replacementKeyId());
         return ResponseEntity.noContent().build();
     }
 
@@ -43,13 +117,38 @@ public class KeyRegistryAdminController {
             KeyPurpose purpose,
             KeyStatus status,
             String algorithm,
+            String ownerId,
+            KeyOwnerType ownerType,
             String publicKeyPem,
             String privateKeyFileEnvironment) {
     }
 
-    public record KeyStatusChangeRequest(KeyStatus status) {
+    public record KeyStatusChangeRequest(KeyStatus status, String reason, String replacementKeyId) {
+        public KeyStatusChangeRequest(KeyStatus status) {
+            this(status, null, null);
+        }
+    }
+
+    public record KeyRotateRequest(String replacementKeyId) {
     }
 
     public record KeyRegisteredResponse(UUID id, String keyId) {
+    }
+
+    public record KeyMetadataResponse(
+            UUID id,
+            String keyId,
+            KeyPurpose purpose,
+            KeyStatus status,
+            String ownerId,
+            KeyOwnerType ownerType,
+            String algorithm,
+            String fingerprint,
+            String publicKeyPem,
+            Instant createdAt,
+            Instant activatedAt,
+            Instant retiredAt,
+            Instant revokedAt,
+            String replacementKeyId) {
     }
 }
