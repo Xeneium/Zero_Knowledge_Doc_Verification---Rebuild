@@ -14,4 +14,10 @@ public class CredentialExceptionHandler {
     public Map<String, String> credentialNotFound(CredentialNotFoundException exception) {
         return Map.of("error", exception.getMessage());
     }
+
+    @ExceptionHandler(com.zkdoc.credential.HolderCredentialNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Map<String, String> holderCredentialNotFound(com.zkdoc.credential.HolderCredentialNotFoundException exception) {
+        return Map.of("error", exception.getMessage());
+    }
 }

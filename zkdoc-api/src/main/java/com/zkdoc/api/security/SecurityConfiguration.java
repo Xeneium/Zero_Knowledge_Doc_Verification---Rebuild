@@ -34,6 +34,7 @@ public class SecurityConfiguration {
                         .requestMatchers(HttpMethod.POST, "/api/documents", "/api/credentials").hasRole("ISSUER")
                         .requestMatchers(HttpMethod.GET, "/api/documents/*/qr").hasRole("ISSUER")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        .requestMatchers("/api/holder/**").hasAnyRole("HOLDER", "ADMIN")
                         .requestMatchers("/api/v2/zkp/credential-predicates/**").hasRole("VERIFIER")
                         .requestMatchers("/api/documents/**", "/api/credentials/**")
                         .hasAnyRole("ISSUER", "HOLDER", "VERIFIER", "ADMIN")

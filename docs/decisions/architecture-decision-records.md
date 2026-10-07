@@ -438,3 +438,44 @@
 * **Decision:** Enforce unique constraint on `blinding_fingerprint` (SHA-256 of $r$) in the persistence schema and implement automated retry logic in `PedersenCommitmentService` with fresh random scalar generation on collision.
 * **Security Implications:** Ensures cryptographic freshness and prevents cross-attribute linkability or blinding reuse.
 * **Consequences:** Up to 10 retry attempts with secure random regeneration ensure high resilience under concurrent issuance.
+
+
+---
+
+### ADR-043: First-Class Holder Credential Domain Model
+* **Context:** Prior to Phase 6A, credentials existed purely as issuer assertions. There was no first-class domain representation of the holder's ownership relationship, creating risk of conflating issuer assertions with holder proving operations.
+* **Decision:** Introduce a first-class `HolderCredential` domain model distinct from the canonical `Credential`. The holder credential references the authoritative `credentialId` and binds to the canonical `credentialDigest` without duplicating claim attributes.
+* **Security Implications:** Clarifies the security and custody boundary: the issuer asserts claims, while the holder controls operational usage and selective proving.
+* **Consequences:** Holder operations are strictly separated from issuer management.
+
+---
+
+### ADR-044: Holder Proving Material Custody Abstraction
+* **Context:** Future Bulletproof range proofs require attribute values $v$ and blinding factors $r$. Storing these on the server as ordinary credential columns violates zero-knowledge principles and creates critical database breach risks.
+* **Decision:** Create an explicit `HolderProvingMaterialStore` SPI for private opening material, isolating holder witness material from verifier operations and public persistence schemas.
+* **Security Implications:** Prevents server-side persistence of raw witness secrets; provides an integration point for hardware tokens, encrypted wallets, or client-side storage in future phases.
+* **Consequences:** Proving secrets remain in holder custody.
+
+---
+
+### ADR-045: Object-Level Authorization & Anti-IDOR Enforcement
+* **Context:** Exposing holder credential lookups by ID creates severe IDOR risks if authorization only checks whether the caller has `ROLE_HOLDER` without verifying ownership of the target resource.
+* **Decision:** Enforce ownership checks in `HolderCredentialService.findByIdAndHolder` using the authenticated principal's subject ID. Any request by Holder A to access Holder B's records fails closed.
+* **Security Implications:** Blocks horizontal privilege escalation and unauthorized credential snooping.
+* **Consequences:** Unauthorized requests return 404 NOT_FOUND, preventing resource enumeration.
+
+---
+
+### ADR-046: Database Constraint Enforcement on (holder_id, credential_id)
+* **Context:** Concurrent provisioning requests could lead to race conditions resulting in multiple conflicting holder credential instances for the same credential.
+* **Decision:** Enforce `UNIQUE (holder_id, credential_id)` at the database schema level in both PostgreSQL (V4) and SQLite (V9), backed by transactional idempotent provisioning in `HolderCredentialService`.
+* **Security Implications:** Guarantees relational integrity and prevents duplicate provisioning or race condition exploitation.
+* **Consequences:** Duplicate provisioning requests safely return the existing provisioned record without errors.
+
+---
+
+### ADR-047: Strict Response Minimization for Holder APIs
+* **Context:** APIs returning internal entities or database rows risk leaking internal keys, hashes, or inadvertent attributes to clients.
+* **Decision:** Implement dedicated transport DTO `HolderCredentialResponse` returning only public identifiers, hex-encoded digests, lifecycle status, version, and timestamps.
+* **Security Implications:** Enforces information minimization and ensures zero proving witness material or raw attributes are returned in responses.
+* **Consequences:** Verifiers and external observers receive only required metadata.
