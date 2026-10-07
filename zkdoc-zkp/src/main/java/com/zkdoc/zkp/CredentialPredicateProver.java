@@ -57,7 +57,7 @@ public class CredentialPredicateProver {
         }
     }
 
-    static Transcript transcriptFor(byte[] nonce) {
+    public static Transcript transcriptFor(byte[] nonce) {
         Transcript transcript = new Transcript();
         transcript.append("zkdoc-proof-version", PROOF_VERSION);
         transcript.append("verifier-nonce", Base64.getUrlEncoder().withoutPadding().encodeToString(nonce));
