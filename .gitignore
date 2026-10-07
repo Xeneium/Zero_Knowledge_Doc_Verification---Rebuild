@@ -59,10 +59,14 @@ frontend/coverage/
 frontend/node/
 **/node_modules/
 
-# === Security Scanners & Linters Temporary Caches ===
+# === Security Scanners & Secret Detection ===
 .scannerwork/
 .semgrep/
 .trivy/
+gitleaks-report.json
+gitleaks-report.sarif
+.gitleaks/
+*.leak
 dump.txt
 files.txt
 poms.txt
