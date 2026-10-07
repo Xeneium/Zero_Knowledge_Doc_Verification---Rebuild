@@ -479,3 +479,44 @@
 * **Decision:** Implement dedicated transport DTO `HolderCredentialResponse` returning only public identifiers, hex-encoded digests, lifecycle status, version, and timestamps.
 * **Security Implications:** Enforces information minimization and ensures zero proving witness material or raw attributes are returned in responses.
 * **Consequences:** Verifiers and external observers receive only required metadata.
+
+---
+
+### ADR-048: Holder Credential Operational Lifecycle Transitions (Suspend/Activate)
+* **Context:** Holders may temporarily suspend credential usability (e.g., mislaid phone or temporary security lock) without permanently destroying the underlying credential record.
+* **Decision:** Implement explicit `suspend` and `reactivate` lifecycle transitions in `HolderCredentialService` and expose them via authenticated endpoints. Transitions strictly follow the `HolderCredentialStatus` state machine (`ACTIVE` <-> `SUSPENDED` -> `REVOKED`), ensuring revoked credentials can never be reactivated.
+* **Security Implications:** Gives holders fine-grained operational control while preventing unauthorized state resurrecting.
+* **Consequences:** Proof preparation automatically rejects suspended credentials.
+
+---
+
+### ADR-049: Dedicated HolderProofContext Proving Boundary Record
+* **Context:** Bulletproof provers require access to both public commitment anchors and private opening witness tuples. Passing loosely-coupled arrays or raw entities creates boundary leakage and logging vulnerabilities.
+* **Decision:** Introduce an immutable `HolderProofContext` record implementing `javax.security.auth.Destroyable` with an explicit `toString()` redacting `attributeValue` and `blindingFactor`.
+* **Security Implications:** Completely eliminates accidental witness exposure via logging, metrics, or heap inspection.
+* **Consequences:** Provers operate against a strongly typed, security-enforced context.
+
+---
+
+### ADR-050: Cryptographic Continuity Pre-Condition Checking
+* **Context:** If corrupted or malicious witness material is supplied to the proof generator, invalid proofs will be generated or internal math errors may be triggered.
+* **Decision:** `DefaultHolderProvingMaterialAccess` performs an explicit cryptographic verification $C \stackrel{?}{=} vG + rH$ using `PedersenCommitmentService.verifyOpening` and validates blinding fingerprints before granting the proving context.
+* **Security Implications:** Fails closed if witness data has been tampered with, preventing forged or compromised proof execution.
+* **Consequences:** Mathematical and cryptographic integrity is verified at the access boundary.
+
+---
+
+### ADR-051: Multi-Layer Lifecycle Enforcement in Proving Boundary
+* **Context:** A credential may be valid at the holder level but revoked by the issuer, or vice versa.
+* **Decision:** The proving boundary enforces dual lifecycle checks: both the `HolderCredential` must be `ACTIVE` and the issuer's authoritative `Credential` must be `ACTIVE`.
+* **Security Implications:** Prevents generating proofs for revoked credentials regardless of which party initiated the revocation.
+* **Consequences:** Proof generation is rejected if either entity is revoked or suspended.
+
+---
+
+### ADR-052: Zero-Custody Verifier Decoupling
+* **Context:** Verifiers must verify zero-knowledge proofs without accessing holder witness material or contacting the holder's witness store.
+* **Decision:** `HolderProvingMaterialAccess` and `HolderProvingMaterialStore` are strictly isolated from verifier endpoints and public APIs.
+* **Security Implications:** Verifiers receive only public proofs and commitments; secret witness values never touch verifier code or public channels.
+* **Consequences:** Adheres strictly to Zero-Knowledge principles.
+

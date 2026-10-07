@@ -79,6 +79,26 @@ public class HolderCredentialController {
         return toResponse(hc);
     }
 
+    @PostMapping("/{id}/suspend")
+    @PreAuthorize("hasRole('HOLDER') or hasRole('ADMIN')")
+    public HolderCredentialResponse suspend(@PathVariable UUID id, Authentication authentication) {
+        String subject = authentication != null ? authentication.getName() : "anonymous";
+        HolderId holderId = HolderId.of(subject);
+        HolderCredential hc = holderCredentialService.suspend(HolderCredentialId.of(id), holderId);
+        auditService.record(authentication, "HOLDER_CREDENTIAL_SUSPENDED", id, null, true);
+        return toResponse(hc);
+    }
+
+    @PostMapping("/{id}/activate")
+    @PreAuthorize("hasRole('HOLDER') or hasRole('ADMIN')")
+    public HolderCredentialResponse activate(@PathVariable UUID id, Authentication authentication) {
+        String subject = authentication != null ? authentication.getName() : "anonymous";
+        HolderId holderId = HolderId.of(subject);
+        HolderCredential hc = holderCredentialService.reactivate(HolderCredentialId.of(id), holderId);
+        auditService.record(authentication, "HOLDER_CREDENTIAL_ACTIVATED", id, null, true);
+        return toResponse(hc);
+    }
+
     @PostMapping("/{id}/revoke")
     @PreAuthorize("hasRole('HOLDER') or hasRole('ADMIN')")
     public HolderCredentialResponse revoke(@PathVariable UUID id, Authentication authentication) {

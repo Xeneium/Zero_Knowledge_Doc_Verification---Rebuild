@@ -129,6 +129,36 @@ class HolderCredentialSecurityIntegrationTest {
                 .andExpect(jsonPath("$.version").value(2));
     }
 
+    @Test
+    @DisplayName("Lifecycle Operations: Holder can suspend and activate own credential")
+    @WithMockUser(username = "holder-david", roles = "HOLDER")
+    void holderCanSuspendAndActivateCredential() throws Exception {
+        UUID credentialId = UUID.randomUUID();
+        issueTestCredential(credentialId);
+
+        ProvisionHolderCredentialRequest req = new ProvisionHolderCredentialRequest(credentialId);
+
+        String davidResp = mockMvc.perform(post("/api/holder/credentials/provision")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        HolderCredentialResponse davidHc = objectMapper.readValue(davidResp, HolderCredentialResponse.class);
+
+        // Suspend
+        mockMvc.perform(post("/api/holder/credentials/" + davidHc.id() + "/suspend"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("SUSPENDED"))
+                .andExpect(jsonPath("$.version").value(2));
+
+        // Activate
+        mockMvc.perform(post("/api/holder/credentials/" + davidHc.id() + "/activate"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.version").value(3));
+    }
+
     private void issueTestCredential(UUID id) {
         credentialService.issue(new Credential(
                 "issuer-test", id, List.of(new CredentialAttribute("age", "25")),

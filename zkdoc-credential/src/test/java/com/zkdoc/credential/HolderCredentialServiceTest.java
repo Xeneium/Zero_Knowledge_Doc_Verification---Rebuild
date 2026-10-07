@@ -134,6 +134,38 @@ class HolderCredentialServiceTest {
                 service.revoke(hc.id(), attacker));
     }
 
+    @Test
+    @DisplayName("Lifecycle & Suspension: Holder can suspend and reactivate credential with state machine enforcement")
+    void suspendAndReactivateLifecycle() {
+        HolderId holder = HolderId.of("user-holder-1");
+        CredentialId credId = CredentialId.of(validCredentialId);
+
+        HolderCredential hc = service.provision(holder, credId);
+        assertTrue(hc.status().isUsable());
+
+        // Suspend
+        HolderCredential suspended = service.suspend(hc.id(), holder);
+        assertEquals(HolderCredentialStatus.SUSPENDED, suspended.status());
+        assertFalse(suspended.status().isUsable());
+        assertEquals(2, suspended.version());
+
+        // Reactivate
+        HolderCredential reactivated = service.reactivate(hc.id(), holder);
+        assertEquals(HolderCredentialStatus.ACTIVE, reactivated.status());
+        assertTrue(reactivated.status().isUsable());
+        assertEquals(3, reactivated.version());
+
+        // Revoke from active
+        HolderCredential revoked = service.revoke(hc.id(), holder);
+        assertEquals(HolderCredentialStatus.REVOKED, revoked.status());
+
+        // Cannot reactivate or suspend a revoked credential (terminal state)
+        assertThrows(IllegalStateException.class, () ->
+                service.reactivate(hc.id(), holder));
+        assertThrows(IllegalStateException.class, () ->
+                service.suspend(hc.id(), holder));
+    }
+
     private static class InMemoryHolderCredentialStore implements HolderCredentialStore {
         private final List<HolderCredential> credentials = new ArrayList<>();
 

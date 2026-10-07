@@ -89,6 +89,30 @@ public class HolderCredentialService {
     }
 
     /**
+     * Suspends a holder credential, enforcing that the requesting caller owns the record.
+     */
+    @Transactional
+    public HolderCredential suspend(HolderCredentialId id, HolderId holderId) {
+        HolderCredential hc = findByIdAndHolder(id, holderId);
+        HolderCredential updated = hc.transitionTo(HolderCredentialStatus.SUSPENDED);
+        holderCredentialStore.updateStatus(id, HolderCredentialStatus.SUSPENDED);
+        log.info("Holder credential suspended: id={}, holder={}", id, holderId);
+        return updated;
+    }
+
+    /**
+     * Reactivates a suspended holder credential, enforcing that the requesting caller owns the record.
+     */
+    @Transactional
+    public HolderCredential reactivate(HolderCredentialId id, HolderId holderId) {
+        HolderCredential hc = findByIdAndHolder(id, holderId);
+        HolderCredential updated = hc.transitionTo(HolderCredentialStatus.ACTIVE);
+        holderCredentialStore.updateStatus(id, HolderCredentialStatus.ACTIVE);
+        log.info("Holder credential reactivated: id={}, holder={}", id, holderId);
+        return updated;
+    }
+
+    /**
      * Revokes a holder credential, enforcing that the requesting caller owns the record.
      */
     @Transactional
