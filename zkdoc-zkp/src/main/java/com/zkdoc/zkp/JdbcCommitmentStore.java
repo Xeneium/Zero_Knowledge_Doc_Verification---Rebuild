@@ -41,10 +41,26 @@ public class JdbcCommitmentStore implements CommitmentStore {
                 SELECT id, credential_id, attribute_name, commitment, attestation, attestation_payload, blinding_fingerprint
                 FROM attribute_commitments
                 WHERE credential_id = ? AND attribute_name = ?
-                ORDER BY rowid DESC
+                ORDER BY created_at DESC
                 LIMIT 1
                 """, resultSet -> resultSet.next() ? Optional.of(map(resultSet)) : Optional.empty(),
                 credentialId.toString(), attributeName);
+    }
+
+    @Override
+    public Optional<AttributeCommitment> findByCredentialIdAndAttributeName(
+            UUID credentialId, String attributeName) {
+        return findLatestByCredentialIdAndAttributeName(credentialId, attributeName);
+    }
+
+    @Override
+    public Optional<AttributeCommitment> findById(UUID commitmentId) {
+        return jdbcTemplate.query("""
+                SELECT id, credential_id, attribute_name, commitment, attestation, attestation_payload, blinding_fingerprint
+                FROM attribute_commitments
+                WHERE id = ?
+                """, resultSet -> resultSet.next() ? Optional.of(map(resultSet)) : Optional.empty(),
+                commitmentId.toString());
     }
 
     private AttributeCommitment map(ResultSet resultSet) throws SQLException {

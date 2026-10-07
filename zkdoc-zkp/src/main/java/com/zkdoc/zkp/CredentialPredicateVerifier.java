@@ -14,12 +14,17 @@ import com.zkdoc.credential.CanonicalCredentialEncoder;
 import com.zkdoc.credential.CredentialRsaPssSigner;
 import com.zkdoc.credential.CredentialSha256Hasher;
 import com.zkdoc.credential.CredentialTrustVerifier;
+import com.zkdoc.keys.KeyPurpose;
+import com.zkdoc.keys.KeyRegistryService;
+import com.zkdoc.keys.RegisteredKey;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
+import java.util.List;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -30,9 +35,32 @@ public class CredentialPredicateVerifier {
     private final CredentialSha256Hasher hasher;
     private final CredentialRsaPssSigner issuerSigner;
     private final CredentialTrustVerifier credentialTrustVerifier;
+    private final KeyRegistryService keyRegistryService;
     private final PedersenCommitment pedersenCommitment;
     private final BulletProofGenerators generators;
     private final NumberIsGreaterOrEqual predicate = new NumberIsGreaterOrEqual();
+
+    @Autowired
+    public CredentialPredicateVerifier(
+            CommitmentStore commitmentStore,
+            CanonicalCredentialEncoder canonicalEncoder,
+            CredentialSha256Hasher hasher,
+            CredentialRsaPssSigner issuerSigner,
+            CredentialTrustVerifier credentialTrustVerifier,
+            @Autowired(required = false) KeyRegistryService keyRegistryService) {
+        this.commitmentStore = commitmentStore;
+        this.canonicalEncoder = canonicalEncoder;
+        this.hasher = hasher;
+        this.issuerSigner = issuerSigner;
+        this.credentialTrustVerifier = credentialTrustVerifier;
+        this.keyRegistryService = keyRegistryService;
+        try {
+            this.pedersenCommitment = PedersenCommitment.getDefault();
+            this.generators = new BulletProofGenerators(128, 1);
+        } catch (IOException | NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("Unable to initialize predicate verifier", exception);
+        }
+    }
 
     public CredentialPredicateVerifier(
             CommitmentStore commitmentStore,
@@ -40,17 +68,7 @@ public class CredentialPredicateVerifier {
             CredentialSha256Hasher hasher,
             CredentialRsaPssSigner issuerSigner,
             CredentialTrustVerifier credentialTrustVerifier) {
-        this.commitmentStore = commitmentStore;
-        this.canonicalEncoder = canonicalEncoder;
-        this.hasher = hasher;
-        this.issuerSigner = issuerSigner;
-        this.credentialTrustVerifier = credentialTrustVerifier;
-        try {
-            this.pedersenCommitment = PedersenCommitment.getDefault();
-            this.generators = new BulletProofGenerators(128, 1);
-        } catch (IOException | NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("Unable to initialize predicate verifier", exception);
-        }
+        this(commitmentStore, canonicalEncoder, hasher, issuerSigner, credentialTrustVerifier, null);
     }
 
     public CredentialPredicateVerificationResult verify(
@@ -96,7 +114,31 @@ public class CredentialPredicateVerifier {
     private boolean hasValidIssuerAttestation(AttributeCommitment commitment) {
         byte[] expectedPayload = canonicalEncoder.encodeCommitmentAttestation(
                 commitment.credentialId(), commitment.attributeName(), commitment.commitment());
-        return Arrays.equals(expectedPayload, commitment.attestationPayload())
-                && issuerSigner.verify(hasher.hash(expectedPayload), commitment.attestation());
+        if (!Arrays.equals(expectedPayload, commitment.attestationPayload())) {
+            return false;
+        }
+
+        byte[] digest = hasher.hash(expectedPayload);
+
+        // First attempt verification against KeyRegistryService if present
+        if (keyRegistryService != null) {
+            if (commitment.attestationKeyId() != null) {
+                if (keyRegistryService.verify(
+                        commitment.attestationKeyId(),
+                        KeyPurpose.COMMITMENT_ATTESTATION_SIGNING,
+                        null,
+                        digest,
+                        commitment.attestation())) {
+                    return true;
+                }
+            }
+        }
+
+        // Fallback to issuerSigner
+        if (issuerSigner != null) {
+            return issuerSigner.verify(digest, commitment.attestation());
+        }
+
+        return false;
     }
 }
