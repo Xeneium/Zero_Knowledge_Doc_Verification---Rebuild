@@ -611,7 +611,7 @@ Comprehensive architecture and security documentation is available in the [`docs
 
 <div align="center">
 
-**Built with ❤️ using Java 21, Spring Boot, and real zero-knowledge cryptography**
+**Built using Java 21, Spring Boot, and real zero-knowledge cryptography**
 
 [⬆ Back to Top](#-zero-knowledge-document-verification)
 
