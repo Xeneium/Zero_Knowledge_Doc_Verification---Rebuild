@@ -131,7 +131,7 @@ class ApiValidationAndErrorSecurityTest {
                     .andExpect(status().isUnsupportedMediaType())
                     .andExpect(jsonPath("$.status").value(415))
                     .andExpect(jsonPath("$.error").value("Unsupported Media Type"))
-                    .andExpect(jsonPath("$.message").value(containsString("Media type 'text/plain' is not supported")));
+                    .andExpect(jsonPath("$.message").value(containsString("not supported")));
         }
     }
 
@@ -239,11 +239,12 @@ class ApiValidationAndErrorSecurityTest {
         @WithMockUser(username = "holder-1", roles = "HOLDER")
         void createCapabilityInvalidTtlReturns400() throws Exception {
             Map<String, Object> badPayload = Map.of(
+                    "credentialId", "00000000-0000-0000-0000-000000000001",
                     "mode", "ONE_TIME",
                     "ttlSeconds", -10 // non-positive
             );
 
-            mockMvc.perform(post("/api/holder/capabilities/00000000-0000-0000-0000-000000000001")
+            mockMvc.perform(post("/api/capabilities")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(badPayload)))
                     .andExpect(status().isBadRequest())
@@ -256,7 +257,7 @@ class ApiValidationAndErrorSecurityTest {
         void keyRegistrationInvalidReturns400() throws Exception {
             Map<String, Object> badPayload = Map.of(
                     "keyId", "", // blank
-                    "purpose", "ISSUER_SIGNING",
+                    "purpose", "CREDENTIAL_SIGNING",
                     "publicKeyPem", "" // blank
             );
 

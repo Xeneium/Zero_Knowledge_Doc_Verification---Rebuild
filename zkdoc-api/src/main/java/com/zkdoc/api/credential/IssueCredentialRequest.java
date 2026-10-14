@@ -20,6 +20,7 @@ import jakarta.validation.constraints.Size;
  * Explicitly decoupled from the authoritative internal domain Credential model.
  */
 public record IssueCredentialRequest(
+        @NotBlank(message = "issuerId must not be blank")
         @Size(max = 256, message = "issuerId must not exceed 256 characters")
         String issuerId,
 
@@ -35,6 +36,7 @@ public record IssueCredentialRequest(
         Instant expiresAt,
         CredentialStatus status,
 
+        @jakarta.validation.constraints.NotEmpty(message = "attributes must not be empty")
         @Size(max = 100, message = "cannot issue credential with more than 100 attributes")
         List<@Valid AttributeRequestDto> attributes) {
 
