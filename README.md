@@ -34,6 +34,7 @@ A multi-module Java platform implementing **Pedersen commitments**, **Bulletproo
 - [Frontend](#-frontend)
 - [Security Model](#-security-model)
 - [Configuration](#-configuration)
+- [Backup, Recovery & Deployment Hardening](#-backup-recovery--deployment-hardening)
 - [Documentation](#-documentation)
 
 ---
@@ -518,6 +519,7 @@ Authenticated document/credential verification is not exposed because the reposi
 | `/api/capabilities/**` | `ISSUER` / `HOLDER` / `ADMIN` | Verification capability management |
 | `/api/v2/zkp/credential-predicates/**` | `VERIFIER` | Predicate proof verification |
 | `/api/holder/**` | `HOLDER` / `ADMIN` | Holder operations |
+| `/api/admin/recovery/**` | `ADMIN` | Post-restore integrity reconciliation & status |
 | `/api/admin/**` | `ADMIN` | Administrative operations |
 
 ### Cryptographic Commitments
@@ -553,12 +555,17 @@ For integer attributes, `zkdoc-zkp` creates a Weavechain Bulletproofs Ristretto 
 | Server Port | `8080` | Spring Boot default |
 | Public Verification URL | `http://localhost:8080` | Override with `ZKDOC_PUBLIC_VERIFICATION_BASE_URL` |
 | Rate Limit | 30 req/min per IP | Public verification endpoint |
+| Artifact Storage Type | `filesystem` | Persistent filesystem (`filesystem`) or in-memory (`ephemeral`) |
+| Artifact Storage Dir | `./data/artifacts` | Base directory for document payload storage |
 
 ### Environment Variables
 
 | Variable | Required | Description |
 |:---------|:---------|:------------|
 | `ZKDOC_PUBLIC_VERIFICATION_BASE_URL` | No | External base URL for QR code generation |
+| `ZKDOC_STORAGE_TYPE` | No | Artifact storage type (`filesystem` or `ephemeral`) |
+| `ZKDOC_STORAGE_BASE_DIR` | No | Target base directory for physical artifact files |
+| `ZKDOC_DB_TYPE` | No | Database dialect (`sqlite` or `postgresql`) |
 
 ### Database Profiles
 
@@ -566,6 +573,45 @@ For integer attributes, `zkdoc-zkp` creates a Weavechain Bulletproofs Ristretto 
 |:---------|:-----------|:------|
 | **SQLite** *(default)* | `V1`–`V10` in `db/migration/sqlite/` | Embedded, zero-config for development |
 | **PostgreSQL** | `V1`–`V5` in `db/migration/postgresql/` | Production-grade, requires connection config |
+
+---
+
+## 💾 Backup, Recovery & Deployment Hardening
+
+The platform implements an automated, cryptographically validated disaster recovery and deployment hardening strategy. Detailed runbooks and disaster procedures are documented in [`docs/RUNBOOK_BACKUP_RECOVERY.md`](docs/RUNBOOK_BACKUP_RECOVERY.md).
+
+### 🎯 Recovery Objectives & Guarantees
+- **RPO (Recovery Point Objective)**: `< 1 hour` via scheduled snapshots and database dumps.
+- **RTO (Recovery Time Objective)**: `< 15 minutes` for container recreation and data restoration.
+- **Private Key Non-Export Invariant**: Private signing keys and proving secrets are strictly excluded from all database and artifact backups.
+
+### 🧰 Operational Scripts
+
+| Tool / Script | Purpose | Safeguards |
+|:--------------|:--------|:-----------|
+| `scripts/backup.sh` (POSIX) | Full DB & artifact backup | Scans for private key leaks, computes SHA-256 manifest, packages tar.gz/zip |
+| `scripts/backup.ps1` (PowerShell) | Windows backup automation | Equivalent PowerShell implementation with automated retention cleanup |
+| `scripts/restore.sh` (POSIX) | Disaster recovery restoration | Validates SHA-256 manifests, requires `--force-overwrite-target` |
+| `scripts/restore.ps1` (PowerShell) | Windows restore automation | Validates pre-flight checksums and restores DB + artifact files |
+
+### 🔍 Post-Recovery Reconciliation Engine
+Following any restore, operators invoke the automated reconciliation engine to verify end-to-end cryptographic and physical integrity:
+
+- **Endpoint**: `POST /api/admin/recovery/reconcile` (Requires `ROLE_ADMIN`)
+- **Inspection Layers**:
+  1. **Database Schema**: Validates Flyway migration consistency.
+  2. **Physical Artifacts**: Computes streaming SHA-256 digest of every stored document payload on disk against `document_artifacts.sha256_hex`.
+  3. **Key Registry**: Validates all registered public key PEM formats and lifecycle states.
+  4. **Credential Signatures**: Verifies RSA-PSS signatures over canonical credential encodings.
+  5. **Audit Hash Chain**: Validates the continuous `prev_event_hash -> current_event_hash` SHA-256 chain in `security_audit_events`.
+- **Status Endpoint**: `GET /api/admin/recovery/status` returns the last cached reconciliation report and timestamp.
+
+### 🛡️ Container & Deployment Hardening
+- **Unprivileged User**: Docker containers execute as `zkdoc:zkdoc` (UID `10001:10001`).
+- **Read-Only Root Filesystem**: `read_only: true` with strict tmpfs mounts for `/tmp` and `/app/tmp`.
+- **Capability Dropping**: All Linux kernel capabilities dropped (`cap_drop: [ALL]`).
+- **Privilege Escalation Prevention**: `no-new-privileges: true`.
+- **Network Segmentation**: Database isolated on internal bridge network (`zkdoc-backend-net` with `internal: true`).
 
 ---
 
@@ -626,10 +672,11 @@ Comprehensive architecture and security documentation is available in the [`docs
 </details>
 
 <details>
-<summary><strong>🧑‍💻 Development Guides (4 files)</strong></summary>
+<summary><strong>🧑‍💻 Operational & Development Guides (5 files)</strong></summary>
 
 | Document | Topic |
 |:---------|:------|
+| `RUNBOOK_BACKUP_RECOVERY.md` | Backup, disaster recovery & reconciliation runbook |
 | `local-development.md` | Local environment setup |
 | `configuration.md` | Configuration reference |
 | `database-development.md` | Database schema and migration guide |

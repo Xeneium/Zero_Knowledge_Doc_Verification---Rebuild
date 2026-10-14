@@ -41,6 +41,10 @@ logging:
 
 zkdoc:
   public-verification-base-url: ${ZKDOC_PUBLIC_VERIFICATION_BASE_URL:http://localhost:8080}
+  storage:
+    type: ${ZKDOC_STORAGE_TYPE:filesystem}
+    filesystem:
+      base-dir: ${ZKDOC_STORAGE_DIR:./data/artifacts}
 
 ---
 # Local Development Profile (SQLite)

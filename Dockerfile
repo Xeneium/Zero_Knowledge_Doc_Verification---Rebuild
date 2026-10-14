@@ -39,8 +39,11 @@ RUN chmod +x ./mvnw && ./mvnw clean package -DskipTests
 # --- Stage 2: Runtime Stage ---
 FROM eclipse-temurin:21-jre-alpine AS runtime
 
-# Create unprivileged system group and user
-RUN addgroup -S zkdoc && adduser -S zkdoc -G zkdoc
+# Create unprivileged system group and user with explicit UID/GID
+RUN addgroup -g 10001 -S zkdoc && \
+    adduser -u 10001 -S zkdoc -G zkdoc && \
+    mkdir -p /app /app/tmp /var/lib/zkdoc/artifacts && \
+    chown -R zkdoc:zkdoc /app /var/lib/zkdoc
 
 WORKDIR /app
 
@@ -48,7 +51,7 @@ WORKDIR /app
 COPY --from=builder --chown=zkdoc:zkdoc /build/zkdoc-api/target/zkdoc-api-*.jar /app/app.jar
 
 # Switch to non-root user
-USER zkdoc:zkdoc
+USER 10001:10001
 
 EXPOSE 8080
 
@@ -56,9 +59,10 @@ EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
     CMD wget -qO- http://localhost:8080/actuator/health/readiness || exit 1
 
-# Configure JVM container ergonomics and entropy source
+# Configure JVM container ergonomics, entropy source, and temporary directory
 ENTRYPOINT ["java", \
     "-XX:+UseContainerSupport", \
     "-XX:MaxRAMPercentage=75.0", \
     "-Djava.security.egd=file:/dev/./urandom", \
+    "-Djava.io.tmpdir=/tmp", \
     "-jar", "/app/app.jar"]
