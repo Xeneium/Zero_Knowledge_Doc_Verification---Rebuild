@@ -52,6 +52,7 @@ public class DefaultZkpStatementVerificationService implements ZkpStatementVerif
     private final CredentialRsaPssSigner issuerSigner;
     private final KeyRegistryService keyRegistryService;
     private final BulletproofPredicateEngine predicateEngine;
+    private final java.time.Clock clock;
 
     @Autowired
     public DefaultZkpStatementVerificationService(
@@ -61,7 +62,8 @@ public class DefaultZkpStatementVerificationService implements ZkpStatementVerif
             CredentialSha256Hasher hasher,
             CredentialRsaPssSigner issuerSigner,
             @Autowired(required = false) KeyRegistryService keyRegistryService,
-            BulletproofPredicateEngine predicateEngine) {
+            BulletproofPredicateEngine predicateEngine,
+            @Autowired(required = false) java.time.Clock clock) {
         this.credentialStore = Objects.requireNonNull(credentialStore, "credentialStore must not be null");
         this.commitmentStore = Objects.requireNonNull(commitmentStore, "commitmentStore must not be null");
         this.canonicalEncoder = Objects.requireNonNull(canonicalEncoder, "canonicalEncoder must not be null");
@@ -69,6 +71,18 @@ public class DefaultZkpStatementVerificationService implements ZkpStatementVerif
         this.issuerSigner = Objects.requireNonNull(issuerSigner, "issuerSigner must not be null");
         this.keyRegistryService = keyRegistryService;
         this.predicateEngine = Objects.requireNonNull(predicateEngine, "predicateEngine must not be null");
+        this.clock = clock != null ? clock : java.time.Clock.systemUTC();
+    }
+
+    public DefaultZkpStatementVerificationService(
+            CredentialStore credentialStore,
+            CommitmentStore commitmentStore,
+            CanonicalCredentialEncoder canonicalEncoder,
+            CredentialSha256Hasher hasher,
+            CredentialRsaPssSigner issuerSigner,
+            KeyRegistryService keyRegistryService,
+            BulletproofPredicateEngine predicateEngine) {
+        this(credentialStore, commitmentStore, canonicalEncoder, hasher, issuerSigner, keyRegistryService, predicateEngine, java.time.Clock.systemUTC());
     }
 
     @Override
@@ -89,7 +103,7 @@ public class DefaultZkpStatementVerificationService implements ZkpStatementVerif
         if (credential.status() != CredentialStatus.ACTIVE) {
             throw new IllegalStateException("Credential is not in ACTIVE state: " + credential.status());
         }
-        if (credential.expiresAt().isBefore(Instant.now())) {
+        if (!clock.instant().isBefore(credential.expiresAt())) {
             throw new IllegalStateException("Credential has expired: expiresAt=" + credential.expiresAt());
         }
 

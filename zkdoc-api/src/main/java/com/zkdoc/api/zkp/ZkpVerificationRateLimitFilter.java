@@ -20,14 +20,25 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * Protects against resource exhaustion and denial-of-service attempts by throttling requests
  * per authenticated user or remote IP address.
  */
-@Component
 public class ZkpVerificationRateLimitFilter extends OncePerRequestFilter {
     public static final String ZKP_VERIFY_PATH = "/api/v2/zkp/credential-predicates/verify";
     public static final int CAPACITY = 30;
     public static final int REFILL_TOKENS = 30;
     public static final Duration REFILL_DURATION = Duration.ofMinutes(1);
 
-    private final ConcurrentHashMap<String, Bucket> buckets = new ConcurrentHashMap<>();
+    private final com.zkdoc.api.ratelimit.RateLimitService rateLimitService;
+    private final com.zkdoc.api.ratelimit.ClientIpResolver clientIpResolver;
+
+    public ZkpVerificationRateLimitFilter(
+            com.zkdoc.api.ratelimit.RateLimitService rateLimitService,
+            com.zkdoc.api.ratelimit.ClientIpResolver clientIpResolver) {
+        this.rateLimitService = rateLimitService;
+        this.clientIpResolver = clientIpResolver;
+    }
+
+    public ZkpVerificationRateLimitFilter() {
+        this(new com.zkdoc.api.ratelimit.BucketRateLimitService(), new com.zkdoc.api.ratelimit.ClientIpResolver(false));
+    }
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
@@ -37,13 +48,16 @@ public class ZkpVerificationRateLimitFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
-        String key = resolveRateLimitKey(request);
-        Bucket bucket = buckets.computeIfAbsent(key, ignored -> newBucket());
+        String dimension = resolveRateLimitKey(request);
+        com.zkdoc.api.ratelimit.RateLimitKey key = com.zkdoc.api.ratelimit.RateLimitKey.of(
+                com.zkdoc.api.ratelimit.RateLimitCategory.ZKP_VERIFICATION, dimension);
 
-        if (!bucket.tryConsume(1)) {
+        com.zkdoc.api.ratelimit.RateLimitDecision decision = rateLimitService.tryAcquire(key);
+
+        if (!decision.allowed()) {
             response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
             response.setContentType("application/json");
-            response.setHeader("Retry-After", "60");
+            response.setHeader("Retry-After", String.valueOf(decision.retryAfterSeconds()));
             response.getWriter().write("{\"error\":\"Too many verification requests. Rate limit exceeded.\"}");
             return;
         }
@@ -56,20 +70,6 @@ public class ZkpVerificationRateLimitFilter extends OncePerRequestFilter {
         if (auth != null && auth.isAuthenticated() && !"anonymousUser".equals(auth.getName())) {
             return "user:" + auth.getName();
         }
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip == null || ip.isBlank()) {
-            ip = request.getRemoteAddr();
-        } else {
-            ip = ip.split(",")[0].trim();
-        }
-        return "ip:" + (ip != null ? ip : "unknown");
-    }
-
-    private Bucket newBucket() {
-        Bandwidth limit = Bandwidth.builder()
-                .capacity(CAPACITY)
-                .refillGreedy(REFILL_TOKENS, REFILL_DURATION)
-                .build();
-        return Bucket.builder().addLimit(limit).build();
+        return "ip:" + clientIpResolver.resolveClientIp(request);
     }
 }

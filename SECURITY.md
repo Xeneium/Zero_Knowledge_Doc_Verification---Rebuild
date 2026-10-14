@@ -31,3 +31,27 @@
 - SQLite is the project's only configured database. It is not encrypted at rest by this application and is suitable only for a carefully secured single-node deployment with restrictive file permissions, controlled backups, and an explicit retention policy.
 - JWT issuer and audience restrictions are not configured by default; deployers must add those constraints for their identity provider. HTTPS/TLS termination, secret-file permissions, database backups, log retention, and rate-limit storage are deployment responsibilities.
 - The audit log is operational metadata, not a tamper-evident ledger. Restrict database access and retention according to your policy.
+
+---
+
+## Software Supply-Chain & CI/CD Security
+
+### 1. Workflow Least-Privilege Permissions
+- Global workflow access is default read-only (`permissions: contents: read`).
+- Specific write capabilities (e.g. `security-events: write` for SARIF uploads) are scoped exclusively to the job performing the analysis and denied to generic build/test tasks.
+- Untrusted pull requests never receive repository secrets or deployment credentials.
+
+### 2. Action Pinning and Supply-Chain Integrity
+- All third-party GitHub Actions are pinned to immutable 40-character commit SHAs with inline version comments to prevent supply-chain attacks via mutable tags.
+- Build dependencies are resolved deterministically using Maven reactor coordinates and npm `package-lock.json` with `npm ci`.
+
+### 3. Software Bill of Materials (SBOM) & Provenance
+- Machine-readable CycloneDX v1.6 SBOMs are generated for both backend Java components (`bom.json`, `bom.xml` via `cyclonedx-maven-plugin`) and frontend npm packages (`frontend-bom.json` via `npm sbom`).
+- Cryptographic SHA-256 digests (`sbom-checksums.sha256`) and application artifact hashes (`zkdoc-api-artifact.sha256`) are computed and retained as build artifacts.
+
+### 4. Vulnerability Management & SCA Policy
+- **Blocking Severity**: Any unresolved `CRITICAL` or `HIGH` vulnerabilities in runtime dependencies block the pipeline.
+- **Build Tooling vs Runtime**: Build-time devDependencies (e.g., CSS compilers) are evaluated based on exploitability in a non-server context and remediated via overrides where patches exist (e.g., `source-map-js@1.2.2`).
+- **Secret Scanning**: Gitleaks executes across the full commit history with `.gitleaks.toml` rules. Legitimate synthetic test keys are strictly confined to dedicated test classes.
+- **Container Hardening**: The multi-stage Dockerfile runs unprivileged as `zkdoc:zkdoc`, includes a container health check, minimizes the runtime attack surface via `eclipse-temurin:21-jre-alpine`, and is audited via Hadolint and Trivy.
+

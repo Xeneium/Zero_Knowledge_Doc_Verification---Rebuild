@@ -10,6 +10,7 @@ import com.zkdoc.keys.KeyStatus;
 import com.zkdoc.keys.RegisteredKey;
 import java.time.Instant;
 import java.util.Collections;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -39,7 +40,7 @@ public class KeyRegistryAdminController {
     }
 
     @PostMapping
-    public ResponseEntity<KeyRegisteredResponse> register(@RequestBody KeyRegistrationRequest request) {
+    public ResponseEntity<KeyRegisteredResponse> register(@jakarta.validation.Valid @RequestBody KeyRegistrationRequest request) {
         byte[] der = RegisteredKey.decodePemToDer(request.publicKeyPem());
         String fingerprint = KeyFingerprint.fromDer(der).value();
         Instant now = Instant.now();
@@ -75,6 +76,28 @@ public class KeyRegistryAdminController {
         return ResponseEntity.status(HttpStatus.CREATED).body(new KeyRegisteredResponse(key.id(), key.keyId()));
     }
 
+    @GetMapping
+    public ResponseEntity<List<KeyMetadataResponse>> listAllKeys() {
+        List<KeyMetadataResponse> list = keyRegistry.findAll().stream()
+                .map(k -> new KeyMetadataResponse(
+                        k.id(),
+                        k.keyId(),
+                        k.purpose(),
+                        k.status(),
+                        k.ownerId(),
+                        k.ownerType(),
+                        k.algorithm(),
+                        k.fingerprint(),
+                        k.publicKeyPem(),
+                        k.createdAt(),
+                        k.activatedAt(),
+                        k.retiredAt(),
+                        k.revokedAt(),
+                        k.replacementKeyId()))
+                .toList();
+        return ResponseEntity.ok(list);
+    }
+
     @GetMapping("/{keyId}")
     public ResponseEntity<KeyMetadataResponse> getKeyMetadata(@PathVariable String keyId) {
         return keyRegistry.findByKeyId(keyId)
@@ -99,7 +122,7 @@ public class KeyRegistryAdminController {
     @PatchMapping("/{keyId}/status")
     public ResponseEntity<Void> changeStatus(
             @PathVariable String keyId,
-            @RequestBody KeyStatusChangeRequest request) {
+            @jakarta.validation.Valid @RequestBody KeyStatusChangeRequest request) {
         keyRegistryService.updateStatus(keyId, request.status(), request.reason(), request.replacementKeyId());
         return ResponseEntity.noContent().build();
     }
@@ -107,29 +130,54 @@ public class KeyRegistryAdminController {
     @PostMapping("/{keyId}/rotate")
     public ResponseEntity<Void> rotateKey(
             @PathVariable String keyId,
-            @RequestBody KeyRotateRequest request) {
+            @jakarta.validation.Valid @RequestBody KeyRotateRequest request) {
         keyRegistryService.rotateKey(keyId, request.replacementKeyId());
         return ResponseEntity.noContent().build();
     }
 
     public record KeyRegistrationRequest(
+            @jakarta.validation.constraints.NotBlank(message = "keyId must not be blank")
+            @jakarta.validation.constraints.Size(max = 128, message = "keyId must not exceed 128 characters")
             String keyId,
+
+            @jakarta.validation.constraints.NotNull(message = "purpose must not be null")
             KeyPurpose purpose,
+
             KeyStatus status,
+
+            @jakarta.validation.constraints.Size(max = 64, message = "algorithm must not exceed 64 characters")
             String algorithm,
+
+            @jakarta.validation.constraints.Size(max = 128, message = "ownerId must not exceed 128 characters")
             String ownerId,
+
             KeyOwnerType ownerType,
+
+            @jakarta.validation.constraints.NotBlank(message = "publicKeyPem must not be blank")
+            @jakarta.validation.constraints.Size(max = 8192, message = "publicKeyPem must not exceed 8192 characters")
             String publicKeyPem,
+
+            @jakarta.validation.constraints.Size(max = 256, message = "privateKeyFileEnvironment must not exceed 256 characters")
             String privateKeyFileEnvironment) {
     }
 
-    public record KeyStatusChangeRequest(KeyStatus status, String reason, String replacementKeyId) {
+    public record KeyStatusChangeRequest(
+            @jakarta.validation.constraints.NotNull(message = "status must not be null")
+            KeyStatus status,
+
+            @jakarta.validation.constraints.Size(max = 512, message = "reason must not exceed 512 characters")
+            String reason,
+
+            @jakarta.validation.constraints.Size(max = 128, message = "replacementKeyId must not exceed 128 characters")
+            String replacementKeyId) {
         public KeyStatusChangeRequest(KeyStatus status) {
             this(status, null, null);
         }
     }
 
-    public record KeyRotateRequest(String replacementKeyId) {
+    public record KeyRotateRequest(
+            @jakarta.validation.constraints.Size(max = 128, message = "replacementKeyId must not exceed 128 characters")
+            String replacementKeyId) {
     }
 
     public record KeyRegisteredResponse(UUID id, String keyId) {

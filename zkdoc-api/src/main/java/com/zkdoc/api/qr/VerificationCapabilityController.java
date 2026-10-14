@@ -30,12 +30,26 @@ public class VerificationCapabilityController {
 
     private final VerificationCapabilityService capabilityService;
     private final VerificationAuditService verificationAuditService;
+    private final com.zkdoc.api.security.ObjectAuthorizationService objectAuthorizationService;
+    private final com.zkdoc.api.metrics.ZkdocMetrics zkdocMetrics;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public VerificationCapabilityController(
+            VerificationCapabilityService capabilityService,
+            VerificationAuditService verificationAuditService,
+            com.zkdoc.api.security.ObjectAuthorizationService objectAuthorizationService,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) com.zkdoc.api.metrics.ZkdocMetrics zkdocMetrics) {
+        this.capabilityService = Objects.requireNonNull(capabilityService, "capabilityService must not be null");
+        this.verificationAuditService = Objects.requireNonNull(verificationAuditService, "verificationAuditService must not be null");
+        this.objectAuthorizationService = Objects.requireNonNull(objectAuthorizationService, "objectAuthorizationService must not be null");
+        this.zkdocMetrics = zkdocMetrics;
+    }
 
     public VerificationCapabilityController(
             VerificationCapabilityService capabilityService,
-            VerificationAuditService verificationAuditService) {
-        this.capabilityService = Objects.requireNonNull(capabilityService, "capabilityService must not be null");
-        this.verificationAuditService = Objects.requireNonNull(verificationAuditService, "verificationAuditService must not be null");
+            VerificationAuditService verificationAuditService,
+            com.zkdoc.api.security.ObjectAuthorizationService objectAuthorizationService) {
+        this(capabilityService, verificationAuditService, objectAuthorizationService, null);
     }
 
     /**
@@ -43,7 +57,7 @@ public class VerificationCapabilityController {
      */
     @PostMapping
     public ResponseEntity<CapabilityResponse> createCapability(
-            @RequestBody CreateCapabilityRequest request,
+            @jakarta.validation.Valid @RequestBody CreateCapabilityRequest request,
             Authentication authentication) {
         if (request.mode() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "VerificationMode must be specified");
@@ -51,6 +65,9 @@ public class VerificationCapabilityController {
         if (request.credentialId() == null && request.documentId() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Either credentialId or documentId must be provided");
         }
+
+        // Enforce object-level authorization
+        objectAuthorizationService.checkCapabilityCreation(authentication, request.credentialId(), request.documentId());
 
         String caller = (authentication != null && authentication.getName() != null) ? authentication.getName() : "anonymous";
         Duration ttl = (request.ttlSeconds() != null && request.ttlSeconds() > 0)
@@ -67,6 +84,9 @@ public class VerificationCapabilityController {
 
         verificationAuditService.record(authentication, "QR_CAPABILITY_CREATED",
                 capability.credentialId(), capability.documentId(), true);
+        if (zkdocMetrics != null) {
+            zkdocMetrics.recordCapabilityCreated(request.mode().name());
+        }
 
         return ResponseEntity.status(HttpStatus.CREATED).body(CapabilityResponse.from(capability));
     }
@@ -127,6 +147,9 @@ public class VerificationCapabilityController {
             @PathVariable UUID id,
             @RequestParam(name = "reason", required = false) String reason,
             Authentication authentication) {
+        // Enforce object-level authorization: only creator or admin can revoke
+        objectAuthorizationService.checkCapabilityRevocation(authentication, CapabilityId.of(id));
+
         boolean revoked = capabilityService.revokeCapability(CapabilityId.of(id), reason);
         if (!revoked) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Capability not found");
@@ -138,7 +161,12 @@ public class VerificationCapabilityController {
     public record CreateCapabilityRequest(
             UUID credentialId,
             UUID documentId,
+
+            @jakarta.validation.constraints.NotNull(message = "VerificationMode must be specified")
             VerificationMode mode,
+
+            @jakarta.validation.constraints.Positive(message = "ttlSeconds must be positive")
+            @jakarta.validation.constraints.Max(value = 2592000L, message = "ttlSeconds must not exceed 30 days (2592000 seconds)")
             Long ttlSeconds
     ) {}
 

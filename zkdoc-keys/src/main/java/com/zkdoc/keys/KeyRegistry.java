@@ -34,6 +34,13 @@ public interface KeyRegistry {
     Optional<RegisteredKey> findActiveForSigning(KeyPurpose purpose, String ownerId);
 
     /**
+     * Lists all keys registered in the trust registry.
+     */
+    default List<RegisteredKey> findAll() {
+        return List.of();
+    }
+
+    /**
      * Lists all keys registered to a specific owner.
      */
     List<RegisteredKey> findAllByOwner(String ownerId);

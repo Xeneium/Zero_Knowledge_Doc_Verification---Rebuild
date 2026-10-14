@@ -3,8 +3,23 @@ import { ApiError } from './api-error';
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
+let currentAuthToken: string | null = null;
+let unauthorizedListener: (() => void) | null = null;
+
+export function setAuthToken(token: string | null): void {
+  currentAuthToken = token;
+}
+
+export function getAuthToken(): string | null {
+  return currentAuthToken;
+}
+
+export function setUnauthorizedListener(listener: (() => void) | null): void {
+  unauthorizedListener = listener;
+}
+
 export interface ApiRequestOptions extends Omit<RequestInit, 'body'> {
-  body?: BodyInit | Record<string, unknown> | null;
+  body?: BodyInit | Record<string, unknown> | object | null;
   timeoutMs?: number;
 }
 
@@ -109,7 +124,12 @@ export async function apiRequest<T>(
     ? AbortSignal.any([externalSignal, timeoutController.signal])
     : timeoutController.signal;
   const headers = new Headers(options.headers);
-  headers.set('Accept', 'application/json');
+  if (!headers.has('Accept')) {
+    headers.set('Accept', 'application/json');
+  }
+  if (!headers.has('Authorization') && currentAuthToken) {
+    headers.set('Authorization', `Bearer ${currentAuthToken}`);
+  }
 
   try {
     const response = await fetch(buildUrl(path), {
@@ -120,6 +140,9 @@ export async function apiRequest<T>(
     });
 
     if (!response.ok) {
+      if (response.status === 401 && unauthorizedListener) {
+        unauthorizedListener();
+      }
       throw await toApiError(response);
     }
 
@@ -173,6 +196,67 @@ export async function apiRequest<T>(
   }
 }
 
+export async function apiRequestBlob(
+  path: string,
+  options: ApiRequestOptions = {},
+): Promise<Blob> {
+  const {
+    timeoutMs = DEFAULT_TIMEOUT_MS,
+    signal: externalSignal,
+    body,
+    ...requestInit
+  } = options;
+  const timeoutController = new AbortController();
+  const timeout = window.setTimeout(
+    () => timeoutController.abort('timeout'),
+    timeoutMs,
+  );
+  const signal = externalSignal
+    ? AbortSignal.any([externalSignal, timeoutController.signal])
+    : timeoutController.signal;
+  const headers = new Headers(options.headers);
+  if (!headers.has('Authorization') && currentAuthToken) {
+    headers.set('Authorization', `Bearer ${currentAuthToken}`);
+  }
+
+  try {
+    const response = await fetch(buildUrl(path), {
+      ...requestInit,
+      headers,
+      body: serializeBody(body, headers),
+      signal,
+    });
+
+    if (!response.ok) {
+      if (response.status === 401 && unauthorizedListener) {
+        unauthorizedListener();
+      }
+      throw await toApiError(response);
+    }
+
+    return await response.blob();
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    if (signal.aborted) {
+      const timedOut =
+        timeoutController.signal.aborted && !externalSignal?.aborted;
+      throw new ApiError(
+        timedOut ? 'The request timed out.' : 'The request was cancelled.',
+        {
+          kind: timedOut ? 'timeout' : 'cancelled',
+          cause: error,
+        },
+      );
+    }
+    throw new ApiError('The server could not be reached.', {
+      kind: 'network',
+      cause: error,
+    });
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 export const apiClient = {
   get: <T>(path: string, options?: ApiRequestOptions) =>
     apiRequest<T>(path, { ...options, method: 'GET' }),
@@ -181,4 +265,13 @@ export const apiClient = {
     body?: ApiRequestOptions['body'],
     options?: ApiRequestOptions,
   ) => apiRequest<T>(path, { ...options, method: 'POST', body }),
+  patch: <T>(
+    path: string,
+    body?: ApiRequestOptions['body'],
+    options?: ApiRequestOptions,
+  ) => apiRequest<T>(path, { ...options, method: 'PATCH', body }),
+  delete: <T>(path: string, options?: ApiRequestOptions) =>
+    apiRequest<T>(path, { ...options, method: 'DELETE' }),
+  getBlob: (path: string, options?: ApiRequestOptions) =>
+    apiRequestBlob(path, { ...options, method: 'GET' }),
 };

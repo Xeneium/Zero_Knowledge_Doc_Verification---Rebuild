@@ -34,25 +34,41 @@ public class PublicVerificationController {
     private final VerificationAuditService verificationAuditService;
     private final VerificationCapabilityService capabilityService;
     private final CredentialService credentialService;
+    private final com.zkdoc.api.metrics.ZkdocMetrics zkdocMetrics;
 
     @Autowired
     public PublicVerificationController(
             DocumentUploadService documentUploadService,
             VerificationAuditService verificationAuditService,
             @Autowired(required = false) VerificationCapabilityService capabilityService,
-            @Autowired(required = false) CredentialService credentialService) {
+            @Autowired(required = false) CredentialService credentialService,
+            @Autowired(required = false) com.zkdoc.api.metrics.ZkdocMetrics zkdocMetrics) {
         this.documentUploadService = documentUploadService;
         this.verificationAuditService = verificationAuditService;
         this.capabilityService = capabilityService;
         this.credentialService = credentialService;
+        this.zkdocMetrics = zkdocMetrics;
+    }
+
+    public PublicVerificationController(
+            DocumentUploadService documentUploadService,
+            VerificationAuditService verificationAuditService,
+            VerificationCapabilityService capabilityService,
+            CredentialService credentialService) {
+        this(documentUploadService, verificationAuditService, capabilityService, credentialService, null);
     }
 
     @GetMapping("/{token}")
     public PublicVerificationResult verify(@PathVariable String token) {
         if (token == null || token.isBlank() || token.length() > 128) {
             verificationAuditService.record(null, "PUBLIC_VERIFICATION_ATTEMPT", null, null, false);
+            if (zkdocMetrics != null) {
+                zkdocMetrics.recordPublicVerification("UNKNOWN", "INVALID_TOKEN", null);
+            }
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid token format");
         }
+
+        long start = System.nanoTime();
 
         // 1. Check if token maps to a Phase 11 VerificationCapability
         if (capabilityService != null) {
@@ -61,6 +77,9 @@ public class PublicVerificationController {
                 CapabilityVerificationContext ctx = ctxOpt.get();
                 if (!ctx.isUsable()) {
                     verificationAuditService.record(null, "QR_VERIFICATION_FAILURE", ctx.credentialId(), ctx.documentId(), false);
+                    if (zkdocMetrics != null) {
+                        zkdocMetrics.recordPublicVerification(ctx.mode().name(), "UNUSABLE", java.time.Duration.ofNanos(System.nanoTime() - start));
+                    }
                     return new PublicVerificationResult(false, false);
                 }
 
@@ -68,7 +87,10 @@ public class PublicVerificationController {
                 if (ctx.credentialId() != null && credentialService != null) {
                     CredentialVerificationResult credResult = credentialService.verify(ctx.credentialId());
                     boolean success = credResult.verified();
-                    verificationAuditService.record(null, "QR_VERIFICATION_SUCCESS", ctx.credentialId(), null, success);
+                    verificationAuditService.record(null, success ? "QR_VERIFICATION_SUCCESS" : "QR_VERIFICATION_FAILURE", ctx.credentialId(), null, success);
+                    if (zkdocMetrics != null) {
+                        zkdocMetrics.recordPublicVerification(ctx.mode().name(), success ? "SUCCESS" : "FAILURE", java.time.Duration.ofNanos(System.nanoTime() - start));
+                    }
                     return new PublicVerificationResult(credResult.signatureValid(), credResult.operationalStatusValid() && success);
                 }
 
@@ -77,6 +99,9 @@ public class PublicVerificationController {
                     var docResult = documentUploadService.verifyStoredCopy(ctx.documentId());
                     boolean success = docResult.verified();
                     verificationAuditService.record(null, "QR_VERIFICATION_SUCCESS", null, ctx.documentId(), success);
+                    if (zkdocMetrics != null) {
+                        zkdocMetrics.recordPublicVerification(ctx.mode().name(), success ? "SUCCESS" : "FAILURE", java.time.Duration.ofNanos(System.nanoTime() - start));
+                    }
                     return new PublicVerificationResult(success, success);
                 }
             }
@@ -85,11 +110,17 @@ public class PublicVerificationController {
         // 2. Fall back to direct document publicToken verification (Mode A / backwards compatibility)
         try {
             PublicVerificationResult result = documentUploadService.verifyPublicToken(token);
-            verificationAuditService.record(null, "PUBLIC_DOCUMENT_VERIFY", null, null,
-                    result.signatureValid() && result.documentActive());
+            boolean verified = result.signatureValid() && result.documentActive();
+            verificationAuditService.record(null, "PUBLIC_DOCUMENT_VERIFY", null, null, verified);
+            if (zkdocMetrics != null) {
+                zkdocMetrics.recordPublicVerification("MODE_A", verified ? "SUCCESS" : "FAILURE", java.time.Duration.ofNanos(System.nanoTime() - start));
+            }
             return result;
         } catch (DocumentNotFoundException exception) {
             verificationAuditService.record(null, "PUBLIC_VERIFICATION_FAILURE", null, null, false);
+            if (zkdocMetrics != null) {
+                zkdocMetrics.recordPublicVerification("MODE_A", "NOT_FOUND", java.time.Duration.ofNanos(System.nanoTime() - start));
+            }
             throw exception;
         }
     }

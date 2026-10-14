@@ -1,0 +1,56 @@
+name: CodeQL Static Application Security Testing (SAST)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: CodeQL Analysis (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: java-kotlin
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up JDK 21
+        if: matrix.language == 'java-kotlin'
+        uses: actions/setup-java@3a4f6e1af504cf6a31855fa8f9c6aa88f95c5100 # v4.3.0
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
+
+      - name: Initialize CodeQL Scanner
+        uses: github/codeql-action/init@6bb034416e7671227a6322aa2ec75f5632bc8103 # v3.28.11
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Compile Backend for Java Analysis
+        if: matrix.language == 'java-kotlin'
+        run: ./mvnw -B compile -DskipTests -Dfrontend.skip=true
+
+      - name: Perform CodeQL Security Analysis
+        uses: github/codeql-action/analyze@6bb034416e7671227a6322aa2ec75f5632bc8103 # v3.28.11
+        with:
+          category: "/language:${{ matrix.language }}"

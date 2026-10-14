@@ -48,13 +48,20 @@ public class DocumentUploadService {
      * Uploads and secures a document artifact from byte content.
      */
     public DocumentRecord upload(byte[] content) {
-        return upload(content, "document.bin", DocumentContentValidator.TYPE_TEXT);
+        return upload(content, "document.bin", DocumentContentValidator.TYPE_TEXT, "system");
     }
 
     /**
      * Uploads and secures a document artifact with format validation and streaming storage.
      */
     public DocumentRecord upload(byte[] content, String filename, String contentType) {
+        return upload(content, filename, contentType, "system");
+    }
+
+    /**
+     * Uploads and secures a document artifact with format validation, streaming storage, and owner identity.
+     */
+    public DocumentRecord upload(byte[] content, String filename, String contentType, String ownerId) {
         Objects.requireNonNull(content, "content must not be null");
         if (content.length == 0) {
             throw new IllegalArgumentException("Document content must not be empty");
@@ -67,6 +74,7 @@ public class DocumentUploadService {
         String safeFilename = DocumentContentValidator.sanitizeFilename(filename);
         String resolvedContentType = (contentType != null && !contentType.isBlank())
                 ? contentType.trim().toLowerCase() : DocumentContentValidator.TYPE_TEXT;
+        String resolvedOwnerId = (ownerId != null && !ownerId.isBlank()) ? ownerId.trim() : "system";
 
         // Perform magic byte content inspection
         try {
@@ -105,7 +113,7 @@ public class DocumentUploadService {
         }
 
         DocumentRecord document = new DocumentRecord(
-                documentId, storedContent, digest, signature, nextPublicToken(), true);
+                documentId, storedContent, digest, signature, nextPublicToken(), true, resolvedOwnerId);
         documentStore.save(document);
         return document;
     }

@@ -2,8 +2,10 @@
 # Use default gitleaks rules
 
 [allowlist]
-description = "Allow local frontend demo capability mock token"
+description = "Allow local frontend demo mock token, synthetic security test fixtures, and template env"
 paths = [
     '''frontend/src/features/verification/demo/presentationDemo\.ts''',
-    '''frontend/src/features/verification/components/PresentationDemoCard\.tsx'''
+    '''frontend/src/features/verification/components/PresentationDemoCard\.tsx''',
+    '''zkdoc-api/src/test/java/com/zkdoc/api/audit/AuditDataMinimizationSecurityTest\.java''',
+    '''\.env\.example$'''
 ]

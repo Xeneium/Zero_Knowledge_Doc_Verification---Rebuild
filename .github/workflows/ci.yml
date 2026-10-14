@@ -1,49 +1,227 @@
-name: CI Pipeline
+name: CI & Supply-Chain Security Pipeline
 
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  build-and-test:
-    name: Build & Test (Java 21 LTS)
+  backend-build-test:
+    name: Backend Build, Test & Package (Java 21 LTS)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout Source Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@3a4f6e1af504cf6a31855fa8f9c6aa88f95c5100 # v4.3.0
         with:
           distribution: 'temurin'
           java-version: '21'
           cache: 'maven'
 
-      - name: Set up Node.js for Frontend Build
-        uses: actions/setup-node@v4
+      - name: Verify Toolchain
+        run: |
+          java -version
+          ./mvnw -version
+
+      - name: Compile and Run All Backend Tests
+        run: ./mvnw -B test -Dfrontend.skip=true
+
+      - name: Package Executable Artifact
+        run: ./mvnw -B package -DskipTests -Dfrontend.skip=true
+
+      - name: Compute Artifact Integrity Checksum
+        run: |
+          cd zkdoc-api/target
+          sha256sum zkdoc-api-*.jar > zkdoc-api-artifact.sha256
+          cat zkdoc-api-artifact.sha256
+
+      - name: Upload Packaged Backend Artifact & Checksum
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
+        with:
+          name: backend-package
+          path: |
+            zkdoc-api/target/zkdoc-api-*.jar
+            zkdoc-api/target/zkdoc-api-artifact.sha256
+          retention-days: 14
+
+  frontend-verify:
+    name: Frontend Verification & Build (Node 24)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
         with:
           node-version: '24'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Build and Verify with Maven
-        run: ./mvnw -B clean verify
+      - name: Deterministic Dependency Installation (Lockfile Integrity)
+        run: npm ci
 
-  security-scan:
-    name: Security Baseline Scan
+      - name: Static Typecheck
+        run: npm run typecheck
+
+      - name: Unit and Component Tests
+        run: npm run test:run
+
+      - name: Production Bundle Compilation
+        run: npm run build
+
+      - name: Compute Bundle Integrity Checksums
+        run: |
+          cd ../zkdoc-api/src/main/resources/static
+          find assets -type f -exec sha256sum {} + > ../../../../../frontend-assets.sha256
+          head -n 20 ../../../../../frontend-assets.sha256
+
+      - name: Upload Frontend Static Assets & Checksums
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
+        with:
+          name: frontend-assets
+          path: |
+            zkdoc-api/src/main/resources/static/
+            frontend-assets.sha256
+          retention-days: 14
+
+  secret-scanning:
+    name: Secret Detection (Gitleaks)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - name: Checkout Source Code
-        uses: actions/checkout@v4
+      - name: Checkout Source Code (Full Git History)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
 
       - name: Run Gitleaks Secret Detection
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@2861e05d045bfd352bfa3d88169d2c206967732a # v2.3.8
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sca-dependency-audit:
+    name: Dependency & Composition Security (SCA)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Frontend Dependency Vulnerability Audit
+        run: |
+          cd frontend
+          npm audit --audit-level=high
+
+      - name: Run Trivy Filesystem Dependency Scanner
+        uses: aquasecurity/trivy-action@18f2510ee396bbf400402947b394f2dd8c87dbb0 # v0.29.0
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+
+  sbom-generation:
+    name: Software Bill of Materials (SBOM) Generation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@3a4f6e1af504cf6a31855fa8f9c6aa88f95c5100 # v4.3.0
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'maven'
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@1d0ff469b7ec7b3cb9d8673fde0c81c44821de2a # v4.2.0
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Generate Backend CycloneDX SBOM (JSON & XML)
+        run: ./mvnw -B org.cyclonedx:cyclonedx-maven-plugin:2.9.1:makeAggregateBom -DskipTests -Dfrontend.skip=true
+
+      - name: Generate Frontend CycloneDX SBOM
+        run: |
+          cd frontend
+          npm ci
+          npm sbom --sbom-format cyclonedx > ../target/frontend-bom.json
+
+      - name: Validate SBOM Syntax & Compute Provenance Checksums
+        run: |
+          cd target
+          jq .bomFormat bom.json
+          jq .bomFormat frontend-bom.json
+          sha256sum bom.json bom.xml frontend-bom.json > sbom-checksums.sha256
+          cat sbom-checksums.sha256
+
+      - name: Upload SBOM Artifacts with Checksums
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
+        with:
+          name: software-bill-of-materials
+          path: |
+            target/bom.json
+            target/bom.xml
+            target/frontend-bom.json
+            target/sbom-checksums.sha256
+          retention-days: 30
+
+  container-security:
+    name: Container Security & Image Vulnerability Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Lint Dockerfile (Hadolint)
+        uses: hadolint/hadolint-action@54c9adabbbe4b1de25f4700da761d3f99f795243 # v3.1.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: error
+
+      - name: Build Container Image
+        run: docker build -t zkdoc-api:${{ github.sha }} .
+
+      - name: Scan Container Image with Trivy
+        uses: aquasecurity/trivy-action@18f2510ee396bbf400402947b394f2dd8c87dbb0 # v0.29.0
+        with:
+          image-ref: zkdoc-api:${{ github.sha }}
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true

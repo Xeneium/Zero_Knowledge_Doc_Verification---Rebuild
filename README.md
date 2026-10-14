@@ -29,6 +29,7 @@ A multi-module Java platform implementing **Pedersen commitments**, **Bulletproo
 - [Project Structure](#-project-structure)
 - [Getting Started](#-getting-started)
 - [Build & Test](#-build--test)
+- [CI/CD & Supply-Chain Security](#-cicd--supply-chain-security)
 - [API Reference](#-api-reference)
 - [Frontend](#-frontend)
 - [Security Model](#-security-model)
@@ -326,6 +327,57 @@ The project includes **73+ tests** across 7 reactor modules with **0 failures, 0
 | `zkdoc-api` | Security authorization, predicate verification boundary, QR capability, rate limiting |
 
 The predicate integration suite logs each security case as `CASE <name>: PASS` or `CASE <name>: FAIL (...)`. It covers both accepted predicates (equal-to and above threshold) and rejected proofs, including wrong credentials, altered proofs or thresholds, replay with a different nonce, revoked/expired credentials, invalid signatures, and commitment substitution.
+
+---
+
+## 🔒 CI/CD & Supply-Chain Security
+
+The platform enforces automated supply-chain, build reproducibility, and vulnerability controls across local environments and GitHub Actions.
+
+### 1. Workflow Architecture & Least Privilege
+
+The GitHub Actions pipeline ([`.github/workflows/ci.yml`](file:///.github/workflows/ci.yml)) implements modular jobs executed with **minimal default permissions** (`permissions: contents: read`):
+
+```mermaid
+flowchart TD
+    Trigger["Git Push / Pull Request / Dispatch"] --> Matrix
+
+    subgraph Pipeline ["Hardened CI/CD & Supply-Chain Pipeline"]
+        Matrix --> B["☕ Backend Build & Test<br/><i>Java 21 · Maven · Pinned SHA</i>"]
+        Matrix --> F["⚛️ Frontend Verification<br/><i>npm ci · Typecheck · Vitest</i>"]
+        Matrix --> S["🔍 Static Analysis & SAST<br/><i>GitHub CodeQL (Java & TS)</i>"]
+        Matrix --> A["📦 Dependency Audit (SCA)<br/><i>Trivy · npm audit (High+)</i>"]
+        Matrix --> G["🔑 Secret Detection<br/><i>Gitleaks (.gitleaks.toml)</i>"]
+        Matrix --> C["📋 CycloneDX SBOM<br/><i>Maven & npm BOMs + SHA-256</i>"]
+        Matrix --> D["🐳 Container Security<br/><i>Hadolint · Trivy image scan</i>"]
+    end
+
+    B --> Art["Artifacts + SHA-256 Hashes"]
+    C --> Art
+```
+
+- **Action Pinning**: All third-party GitHub Actions are pinned to immutable 40-character commit hashes (e.g., `actions/checkout@11bd71901... # v4.2.2`).
+- **Untrusted Code Isolation**: Pull request jobs run without write access or access to sensitive repository secrets.
+- **Fail-Safe Integrity**: Pipelines do not swallow scanner failures or use `continue-on-error`.
+
+### 2. Software Bill of Materials (SBOM)
+
+The pipeline generates machine-readable **CycloneDX v1.6** SBOMs with cryptographic SHA-256 integrity digests:
+- **Java Backend**: Generated via `mvn org.cyclonedx:cyclonedx-maven-plugin:2.9.1:makeAggregateBom` (`target/bom.json` and `target/bom.xml`).
+- **Frontend**: Generated via `npm sbom --sbom-format cyclonedx` (`target/frontend-bom.json`).
+- **Integrity Digest**: Checksum manifest `sbom-checksums.sha256` ensures provenance verification.
+
+### 3. Local Verification Scripts
+
+Developers and CI runners can run the exact pipeline verification locally:
+
+```powershell
+# PowerShell (Windows)
+powershell -ExecutionPolicy Bypass -File .\scripts\ci-local-verify.ps1
+
+# POSIX / Bash (Linux / macOS)
+./scripts/ci-local-verify.sh
+```
 
 ---
 

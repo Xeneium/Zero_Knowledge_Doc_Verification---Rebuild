@@ -9,7 +9,7 @@ FROM eclipse-temurin:21-jdk-alpine AS builder
 WORKDIR /build
 
 # Install Node.js, npm, and build utilities required by frontend-maven-plugin
-RUN apk add --no-cache bash nodejs npm
+RUN apk add --no-cache bash nodejs npm maven
 
 # Copy Maven wrapper and root POM
 COPY mvnw ./
@@ -52,6 +52,10 @@ COPY --from=builder --chown=zkdoc:zkdoc /build/zkdoc-api/target/zkdoc-api-*.jar 
 USER zkdoc:zkdoc
 
 EXPOSE 8080
+
+# Container liveness/readiness health check
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
+    CMD wget -qO- http://localhost:8080/actuator/health/readiness || exit 1
 
 # Configure JVM container ergonomics and entropy source
 ENTRYPOINT ["java", \

@@ -1,84 +1,123 @@
 package com.zkdoc.api.security;
 
-import com.nimbusds.jwt.SignedJWT;
-import com.zkdoc.keys.KeyPurpose;
-import com.zkdoc.keys.KeyRegistryService;
-import com.zkdoc.keys.RegisteredKey;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.security.KeyFactory;
-import java.security.interfaces.RSAPublicKey;
-import java.security.spec.X509EncodedKeySpec;
-import java.util.Base64;
 import java.util.Collection;
-import java.util.List;
+import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Stream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.oauth2.jwt.JwtValidators;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-/** Authenticates a bearer token only when its registered JWT key is active or retired. */
+/**
+ * Production-hardened JWT authentication filter.
+ * Validates bearer tokens using {@link ManagedJwtDecoderProvider}, enforces role/permission
+ * allowlists via {@link JwtAuthoritiesConverter}, populates a safe {@link AuthenticatedUser} principal,
+ * and ensures raw tokens or credentials are never retained in the security context.
+ */
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
-    private static final Set<String> ALLOWED_ROLES = Set.of("ISSUER", "HOLDER", "VERIFIER", "ADMIN");
-    private final KeyRegistryService keyRegistryService;
 
-    public JwtAuthenticationFilter(KeyRegistryService keyRegistryService) {
-        this.keyRegistryService = keyRegistryService;
+    private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
+
+    private final ManagedJwtDecoderProvider decoderProvider;
+    private final JwtAuthoritiesConverter authoritiesConverter;
+    private final com.zkdoc.api.audit.SecurityAuditService auditService;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public JwtAuthenticationFilter(
+            ManagedJwtDecoderProvider decoderProvider,
+            JwtAuthoritiesConverter authoritiesConverter,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) com.zkdoc.api.audit.SecurityAuditService auditService) {
+        this.decoderProvider = Objects.requireNonNull(decoderProvider, "decoderProvider must not be null");
+        this.authoritiesConverter = Objects.requireNonNull(authoritiesConverter, "authoritiesConverter must not be null");
+        this.auditService = auditService;
     }
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
-            throws ServletException, IOException {
+    protected void doFilterInternal(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            FilterChain filterChain) throws ServletException, IOException {
+
         String authorization = request.getHeader(HttpHeaders.AUTHORIZATION);
         if (authorization == null || !authorization.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
+        String token = authorization.substring("Bearer ".length()).trim();
+        if (token.isEmpty()) {
+            recordAuthFailure(request, "EMPTY_TOKEN");
+            sendUnauthorizedError(response, "Bearer token is empty", request.getRequestURI());
+            return;
+        }
+
         try {
-            String token = authorization.substring("Bearer ".length());
-            String keyId = SignedJWT.parse(token).getHeader().getKeyID();
-            RegisteredKey key = keyRegistryService.verificationKey(keyId, KeyPurpose.JWT_SIGNING)
-                    .orElseThrow(() -> new IllegalArgumentException("JWT key is unknown or revoked"));
-            NimbusJwtDecoder decoder = NimbusJwtDecoder.withPublicKey(parseRsaPublicKey(key.publicKeyPem())).build();
-            decoder.setJwtValidator(JwtValidators.createDefault());
-            Jwt jwt = decoder.decode(token);
-            List<SimpleGrantedAuthority> authorities = roleNames(jwt).map(role -> new SimpleGrantedAuthority("ROLE_" + role)).toList();
-            SecurityContextHolder.getContext().setAuthentication(
-                    UsernamePasswordAuthenticationToken.authenticated(jwt.getSubject(), token, authorities));
+            Jwt jwt = decoderProvider.decode(token);
+            Set<String> roles = authoritiesConverter.extractRoles(jwt);
+            Set<String> permissions = authoritiesConverter.extractPermissions(jwt, roles);
+            Collection<GrantedAuthority> authorities = authoritiesConverter.convert(jwt);
+
+            AuthenticatedUser principal = new AuthenticatedUser(
+                    jwt.getSubject(),
+                    jwt.getClaimAsString("iss"),
+                    jwt.getAudience(),
+                    roles,
+                    permissions
+            );
+
+            // Null credentials to avoid memory/logging exposure of the raw bearer token
+            UsernamePasswordAuthenticationToken authentication =
+                    UsernamePasswordAuthenticationToken.authenticated(principal, null, authorities);
+
+            SecurityContextHolder.getContext().setAuthentication(authentication);
             filterChain.doFilter(request, response);
         } catch (Exception exception) {
             SecurityContextHolder.clearContext();
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Invalid bearer token");
+            log.warn("JWT authentication rejected for URI={}: {}", request.getRequestURI(), exception.getMessage());
+            recordAuthFailure(request, "INVALID_TOKEN");
+            sendUnauthorizedError(response, "Invalid or unauthorized bearer token", request.getRequestURI());
         }
     }
 
-    private Stream<String> roleNames(Jwt jwt) {
-        Object roles = jwt.getClaims().get("roles");
-        if (roles instanceof Collection<?> roleCollection) {
-            return roleCollection.stream().filter(String.class::isInstance).map(String.class::cast)
-                    .filter(ALLOWED_ROLES::contains);
+    private void recordAuthFailure(HttpServletRequest request, String reasonCode) {
+        if (auditService != null) {
+            String correlationId = org.slf4j.MDC.get(com.zkdoc.api.logging.MdcCorrelationIdFilter.MDC_KEY);
+            com.zkdoc.api.audit.AuditEventRequest auditReq = com.zkdoc.api.audit.AuditEventRequest
+                    .builder(com.zkdoc.api.audit.AuditEventType.AUTHENTICATION_FAILURE)
+                    .actor("anonymous", com.zkdoc.api.audit.ActorType.ANONYMOUS_PUBLIC)
+                    .target(com.zkdoc.api.audit.TargetType.USER, request.getRequestURI())
+                    .action("JWT_AUTHENTICATE")
+                    .outcome(com.zkdoc.api.audit.AuditOutcome.FAILURE)
+                    .reasonCode(reasonCode)
+                    .correlationId(correlationId)
+                    .clientIp(request.getRemoteAddr())
+                    .build();
+            auditService.record(auditReq);
         }
-        if (roles instanceof String role) {
-            return ALLOWED_ROLES.contains(role) ? Stream.of(role) : Stream.empty();
-        }
-        return Stream.empty();
     }
 
-    private RSAPublicKey parseRsaPublicKey(String pem) throws Exception {
-        String encoded = pem.replaceAll("-----BEGIN PUBLIC KEY-----|-----END PUBLIC KEY-----|\\s", "");
-        byte[] keyBytes = Base64.getDecoder().decode(encoded);
-        return (RSAPublicKey) KeyFactory.getInstance("RSA").generatePublic(new X509EncodedKeySpec(keyBytes));
+    private void sendUnauthorizedError(HttpServletResponse response, String message, String path) throws IOException {
+        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.getWriter().write(String.format(
+                "{\"status\":401,\"error\":\"Unauthorized\",\"message\":\"%s\",\"path\":\"%s\"}",
+                escapeJson(message), escapeJson(path)));
+    }
+
+    private String escapeJson(String input) {
+        if (input == null) return "";
+        return input.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 }

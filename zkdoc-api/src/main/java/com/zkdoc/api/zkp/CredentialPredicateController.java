@@ -23,14 +23,31 @@ public class CredentialPredicateController {
     private final CredentialPredicateVerifier predicateVerifier;
     private final ObjectMapper objectMapper;
     private final VerificationAuditService verificationAuditService;
+    private final com.zkdoc.api.ratelimit.RateLimitService rateLimitService;
+    private final com.zkdoc.api.metrics.ZkdocMetrics zkdocMetrics;
     private static final Set<String> ALLOWED_FIELDS = Set.of(
             "proofVersion", "credentialId", "attributeName", "threshold", "nonce", "proofBytes");
 
-    public CredentialPredicateController(CredentialPredicateVerifier predicateVerifier, ObjectMapper objectMapper,
-            VerificationAuditService verificationAuditService) {
+    @org.springframework.beans.factory.annotation.Autowired
+    public CredentialPredicateController(
+            CredentialPredicateVerifier predicateVerifier,
+            ObjectMapper objectMapper,
+            VerificationAuditService verificationAuditService,
+            com.zkdoc.api.ratelimit.RateLimitService rateLimitService,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) com.zkdoc.api.metrics.ZkdocMetrics zkdocMetrics) {
         this.predicateVerifier = predicateVerifier;
         this.objectMapper = objectMapper;
         this.verificationAuditService = verificationAuditService;
+        this.rateLimitService = rateLimitService;
+        this.zkdocMetrics = zkdocMetrics;
+    }
+
+    public CredentialPredicateController(
+            CredentialPredicateVerifier predicateVerifier,
+            ObjectMapper objectMapper,
+            VerificationAuditService verificationAuditService,
+            com.zkdoc.api.ratelimit.RateLimitService rateLimitService) {
+        this(predicateVerifier, objectMapper, verificationAuditService, rateLimitService, null);
     }
 
     @PostMapping("/verify")
@@ -38,19 +55,44 @@ public class CredentialPredicateController {
             throws JacksonException {
         if (!body.isObject() || containsUnexpectedField(body)) {
             verificationAuditService.record(authentication, "CREDENTIAL_PREDICATE_VERIFY", null, null, false);
+            if (zkdocMetrics != null) {
+                zkdocMetrics.recordZkpProofVerified("INVALID_FIELDS", null);
+            }
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported predicate verification field");
         }
+        long start = System.nanoTime();
         try {
             PredicateVerificationRequest request = objectMapper.treeToValue(body, PredicateVerificationRequest.class);
             validateRequestBounds(request);
-            CredentialPredicateVerificationResult result = predicateVerifier.verify(
-                    request.proofVersion(), request.credentialId(), request.attributeName(), request.threshold(),
-                    request.nonce(), request.proofBytes());
-            verificationAuditService.record(authentication, "CREDENTIAL_PREDICATE_VERIFY", request.credentialId(), null,
-                    result.verified());
-            return result;
+
+            // Bounded concurrency guard for expensive zero-knowledge verification
+            boolean acquired = rateLimitService.tryAcquireConcurrency(com.zkdoc.api.ratelimit.RateLimitCategory.ZKP_VERIFICATION);
+            if (!acquired) {
+                verificationAuditService.record(authentication, "CREDENTIAL_PREDICATE_VERIFY_SATURATED", request.credentialId(), null, false);
+                if (zkdocMetrics != null) {
+                    zkdocMetrics.recordZkpProofVerified("SATURATED", java.time.Duration.ofNanos(System.nanoTime() - start));
+                }
+                throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Cryptographic verification capacity saturated");
+            }
+
+            try {
+                CredentialPredicateVerificationResult result = predicateVerifier.verify(
+                        request.proofVersion(), request.credentialId(), request.attributeName(), request.threshold(),
+                        request.nonce(), request.proofBytes());
+                verificationAuditService.record(authentication, "CREDENTIAL_PREDICATE_VERIFY", request.credentialId(), null,
+                        result.verified());
+                if (zkdocMetrics != null) {
+                    zkdocMetrics.recordZkpProofVerified(result.verified() ? "SUCCESS" : "FAILURE", java.time.Duration.ofNanos(System.nanoTime() - start));
+                }
+                return result;
+            } finally {
+                rateLimitService.releaseConcurrency(com.zkdoc.api.ratelimit.RateLimitCategory.ZKP_VERIFICATION);
+            }
         } catch (JacksonException | IllegalArgumentException exception) {
             verificationAuditService.record(authentication, "CREDENTIAL_PREDICATE_VERIFY", null, null, false);
+            if (zkdocMetrics != null) {
+                zkdocMetrics.recordZkpProofVerified("ERROR", java.time.Duration.ofNanos(System.nanoTime() - start));
+            }
             if (exception instanceof IllegalArgumentException) {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage());
             }

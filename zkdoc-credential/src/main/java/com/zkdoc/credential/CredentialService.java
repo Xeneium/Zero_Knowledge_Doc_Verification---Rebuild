@@ -4,6 +4,7 @@ import com.zkdoc.keys.KeyPurpose;
 import com.zkdoc.keys.KeyRegistryService;
 import com.zkdoc.keys.RegisteredKey;
 import java.security.MessageDigest;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -27,7 +28,7 @@ import org.springframework.stereotype.Service;
  *    - Reconstructs canonical claim metadata (issuer, key, timestamps).
  *    - Verifies issuer existence and non-revocation.
  *    - Resolves public key trust via KeyRegistryService.verifyHistorical.
- *    - Verifies credential validity window and non-revocation status.
+ *    - Evaluates lifecycle validity independently from cryptographic signature validity.
  */
 @Service
 public class CredentialService {
@@ -40,6 +41,7 @@ public class CredentialService {
     private final CredentialRsaPssSigner legacyFallbackSigner;
     private final KeyRegistryService keyRegistryService;
     private final IssuerStore issuerStore;
+    private final Clock clock;
 
     @Autowired
     public CredentialService(
@@ -48,24 +50,33 @@ public class CredentialService {
             CredentialSha256Hasher hasher,
             CredentialRsaPssSigner legacyFallbackSigner,
             @Autowired(required = false) KeyRegistryService keyRegistryService,
-            @Autowired(required = false) IssuerStore issuerStore) {
+            @Autowired(required = false) IssuerStore issuerStore,
+            @Autowired(required = false) Clock clock) {
         this.credentialStore = Objects.requireNonNull(credentialStore, "credentialStore must not be null");
         this.encoder = Objects.requireNonNull(encoder, "encoder must not be null");
         this.hasher = Objects.requireNonNull(hasher, "hasher must not be null");
         this.legacyFallbackSigner = legacyFallbackSigner;
         this.keyRegistryService = keyRegistryService;
         this.issuerStore = issuerStore;
+        this.clock = clock != null ? clock : Clock.systemUTC();
     }
 
-    /**
-     * Backward-compatible constructor for isolated unit tests without KeyRegistryService or IssuerStore.
-     */
+    public CredentialService(
+            CredentialStore credentialStore,
+            CanonicalCredentialEncoder encoder,
+            CredentialSha256Hasher hasher,
+            CredentialRsaPssSigner legacyFallbackSigner,
+            KeyRegistryService keyRegistryService,
+            IssuerStore issuerStore) {
+        this(credentialStore, encoder, hasher, legacyFallbackSigner, keyRegistryService, issuerStore, Clock.systemUTC());
+    }
+
     public CredentialService(
             CredentialStore credentialStore,
             CanonicalCredentialEncoder encoder,
             CredentialSha256Hasher hasher,
             CredentialRsaPssSigner legacyFallbackSigner) {
-        this(credentialStore, encoder, hasher, legacyFallbackSigner, null, null);
+        this(credentialStore, encoder, hasher, legacyFallbackSigner, null, null, Clock.systemUTC());
     }
 
     /**
@@ -128,10 +139,25 @@ public class CredentialService {
     }
 
     /**
-     * Performs authoritative cryptographic verification and trust evaluation of a stored credential.
+     * Performs authoritative cryptographic verification and trust evaluation of a stored credential
+     * evaluated against current wall clock time.
      */
     public CredentialVerificationResult verify(UUID credentialId) {
+        return verifyAt(credentialId, clock.instant(), false);
+    }
+
+    /**
+     * Performs authoritative historical cryptographic verification of a stored credential
+     * evaluated against an explicit past reference time.
+     */
+    public CredentialVerificationResult verifyHistorical(UUID credentialId, Instant referenceTime) {
+        Objects.requireNonNull(referenceTime, "referenceTime must not be null");
+        return verifyAt(credentialId, referenceTime, true);
+    }
+
+    public CredentialVerificationResult verifyAt(UUID credentialId, Instant referenceTime, boolean isHistorical) {
         Objects.requireNonNull(credentialId, "credentialId must not be null");
+        Objects.requireNonNull(referenceTime, "referenceTime must not be null");
 
         StoredCredential stored = credentialStore.findById(credentialId)
                 .orElseThrow(() -> new CredentialNotFoundException(credentialId));
@@ -160,19 +186,43 @@ public class CredentialService {
         }
 
         // 3. Operational lifecycle and expiration checks
-        Instant now = Instant.now();
-        boolean operationalStatusValid = stored.status() == CredentialStatus.ACTIVE
-                && !now.isBefore(decoded.issuedAt())
-                && now.isBefore(stored.expiresAt());
+        boolean operationalStatusValid;
+        String operationalFailureReason = null;
 
-        if (stored.status() != CredentialStatus.ACTIVE) {
-            return CredentialVerificationResult.failure(
-                    credentialId, true, false, false, false, false, "Credential is not active: " + stored.status());
-        }
+        if (isHistorical) {
+            // For historical verification: was the credential active and valid at referenceTime?
+            boolean issuedBeforeRef = !referenceTime.isBefore(decoded.issuedAt());
+            boolean notExpiredAtRef = referenceTime.isBefore(stored.expiresAt());
+            boolean notRevokedAtRef = stored.revokedAt() == null || referenceTime.isBefore(stored.revokedAt());
+            boolean notSuspendedAtRef = stored.suspendedAt() == null || referenceTime.isBefore(stored.suspendedAt());
 
-        if (now.isAfter(stored.expiresAt())) {
-            return CredentialVerificationResult.failure(
-                    credentialId, true, false, false, false, false, "Credential expired at " + stored.expiresAt());
+            if (!issuedBeforeRef) {
+                operationalStatusValid = false;
+                operationalFailureReason = "Credential was not yet issued at " + referenceTime;
+            } else if (!notExpiredAtRef) {
+                operationalStatusValid = false;
+                operationalFailureReason = "Credential was expired at " + referenceTime;
+            } else if (!notRevokedAtRef) {
+                operationalStatusValid = false;
+                operationalFailureReason = "Credential was already revoked at " + referenceTime;
+            } else if (!notSuspendedAtRef && stored.status() == CredentialStatus.SUSPENDED) {
+                operationalStatusValid = false;
+                operationalFailureReason = "Credential was suspended at " + referenceTime;
+            } else {
+                operationalStatusValid = true;
+            }
+        } else {
+            // Current verification: evaluate against current wall clock
+            boolean timeWindowValid = !referenceTime.isBefore(decoded.issuedAt()) && referenceTime.isBefore(stored.expiresAt());
+            if (stored.status() != CredentialStatus.ACTIVE) {
+                operationalStatusValid = false;
+                operationalFailureReason = "Credential is not active: " + stored.status();
+            } else if (!timeWindowValid) {
+                operationalStatusValid = false;
+                operationalFailureReason = "Credential expired at " + stored.expiresAt();
+            } else {
+                operationalStatusValid = true;
+            }
         }
 
         // 4. Validate Issuer status if IssuerStore is present
@@ -222,6 +272,12 @@ public class CredentialService {
             return CredentialVerificationResult.failure(
                     credentialId, true, false, issuerActive, keyTrusted, operationalStatusValid,
                     "Cryptographic signature verification failed");
+        }
+
+        if (!operationalStatusValid) {
+            return CredentialVerificationResult.failure(
+                    credentialId, true, true, issuerActive, keyTrusted, false,
+                    operationalFailureReason);
         }
 
         return CredentialVerificationResult.success(credentialId);

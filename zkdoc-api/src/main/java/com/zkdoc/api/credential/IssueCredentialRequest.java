@@ -10,21 +10,45 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+
 /**
  * Transport-level API DTO for credential issuance requests.
  * Explicitly decoupled from the authoritative internal domain Credential model.
  */
 public record IssueCredentialRequest(
+        @Size(max = 256, message = "issuerId must not exceed 256 characters")
         String issuerId,
+
         UUID credentialId,
+
+        @Size(max = 256, message = "schemaId must not exceed 256 characters")
         String schemaId,
+
+        @Size(max = 128, message = "issuerKeyId must not exceed 128 characters")
         String issuerKeyId,
+
         Instant issuedAt,
         Instant expiresAt,
         CredentialStatus status,
-        List<AttributeRequestDto> attributes) {
 
-    public record AttributeRequestDto(String name, String type, String value) {}
+        @Size(max = 100, message = "cannot issue credential with more than 100 attributes")
+        List<@Valid AttributeRequestDto> attributes) {
+
+    public record AttributeRequestDto(
+            @NotBlank(message = "attribute name must not be blank")
+            @Size(max = 128, message = "attribute name must not exceed 128 characters")
+            String name,
+
+            @Size(max = 32, message = "attribute type must not exceed 32 characters")
+            String type,
+
+            @NotNull(message = "attribute value must not be null")
+            @Size(max = 4096, message = "attribute value must not exceed 4096 characters")
+            String value) {}
 
     public Credential toDomain() {
         CredentialDraft draft = CredentialDraft.newDraft()

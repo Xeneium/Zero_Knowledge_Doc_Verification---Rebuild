@@ -100,6 +100,19 @@ public class JdbcKeyRegistry implements KeyRegistry {
     }
 
     @Override
+    public List<RegisteredKey> findAll() {
+        String sql = """
+                SELECT id, key_id, purpose, status, algorithm, algorithm_parameters,
+                       owner_id, owner_type, public_key_pem, public_key_der, public_key_encoding,
+                       fingerprint, created_at, activated_at, retired_at, revoked_at,
+                       revocation_reason, replacement_key_id, version
+                FROM key_registry
+                ORDER BY created_at DESC
+                """;
+        return jdbcTemplate.query(sql, rowMapper);
+    }
+
+    @Override
     public List<RegisteredKey> findAllByOwner(String ownerId) {
         String sql = """
                 SELECT id, key_id, purpose, status, algorithm, algorithm_parameters,

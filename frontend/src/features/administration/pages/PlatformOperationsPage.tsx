@@ -3,14 +3,21 @@ import {
   FileClock,
   KeyRound,
   LockKeyhole,
+  RefreshCw,
+  Shield,
   ShieldAlert,
+  ShieldCheck,
   UserRoundCog,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { PageHeader } from '../../../components/layout/PageHeader';
 import { Alert } from '../../../components/ui/Alert';
 import { Badge, type BadgeTone } from '../../../components/ui/Badge';
+import { Button } from '../../../components/ui/Button';
 import { Card } from '../../../components/ui/Card';
+import { useAuth } from '../../auth/AuthContext';
+import { fetchRegisteredKeys, type RegisteredKeyDto } from '../api/adminApi';
 
 interface Capability {
   name: string;
@@ -60,6 +67,32 @@ const capabilities: Capability[] = [
 ];
 
 export function PlatformOperationsPage() {
+  const { session, isAuthenticated, hasRole, connectPreset } = useAuth();
+  const isAdmin = isAuthenticated && hasRole('ADMIN');
+
+  const [keys, setKeys] = useState<RegisteredKeyDto[]>([]);
+  const [keysLoading, setKeysLoading] = useState(false);
+  const [keysError, setKeysError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isAdmin) {
+      loadKeys();
+    }
+  }, [isAdmin]);
+
+  const loadKeys = async () => {
+    setKeysLoading(true);
+    setKeysError(null);
+    try {
+      const items = await fetchRegisteredKeys();
+      setKeys(items);
+    } catch (err) {
+      setKeysError(err instanceof Error ? err.message : 'Failed to load key registry');
+    } finally {
+      setKeysLoading(false);
+    }
+  };
+
   return (
     <>
       <PageHeader
@@ -69,20 +102,34 @@ export function PlatformOperationsPage() {
           { label: 'Overview', to: '/' },
           { label: 'Platform operations' },
         ]}
-        actions={<Badge tone="warning">No admin session</Badge>}
+        actions={
+          isAdmin ? (
+            <Badge tone="success">Admin session active</Badge>
+          ) : (
+            <Badge tone="warning">No admin session</Badge>
+          )
+        }
       />
 
-      <Alert
-        tone="warning"
-        title="Administrative access is not connected"
-        className="mb-5"
-      >
-        The backend accepts externally issued bearer JWTs, but this client has
-        no identity provider or authenticated account context. It does not send
-        requests to protected administration endpoints or expose controls that
-        could imply otherwise.
-      </Alert>
+      {!isAdmin ? (
+        <Alert
+          tone="warning"
+          title="Administrative access is not connected"
+          className="mb-5"
+        >
+          The backend accepts externally issued bearer JWTs, but this client has
+          no identity provider or authenticated account context. It does not send
+          requests to protected administration endpoints or expose controls that
+          could imply otherwise.
+        </Alert>
+      ) : (
+        <Alert tone="success" title="Admin Session Connected" className="mb-5">
+          Connected as administrator <span className="font-mono font-semibold">{session?.sub}</span>. Live
+          cryptographic trust anchor inspection is active below.
+        </Alert>
+      )}
 
+      {/* Security architecture landmarks */}
       <section
         className="grid gap-4 lg:grid-cols-3"
         aria-label="Security architecture"
@@ -122,6 +169,85 @@ export function PlatformOperationsPage() {
         </Card>
       </section>
 
+      {/* Live Key Registry for Authenticated Administrators */}
+      {isAdmin && (
+        <Card className="mt-5 p-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-ink-100 pb-4 mb-4">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex size-10 items-center justify-center rounded-lg bg-accent-50 text-accent-700">
+                <Shield className="size-5" />
+              </span>
+              <div>
+                <h2 className="text-base font-semibold text-ink-900">Cryptographic Key Registry (Trust Anchors)</h2>
+                <p className="text-xs text-ink-600">
+                  Authoritative public keys registered for Document Signing, Credential Signing, and JWT Bearer verification.
+                </p>
+              </div>
+            </div>
+            <Button size="sm" variant="secondary" loading={keysLoading} onClick={loadKeys}>
+              <RefreshCw className="size-3.5" />
+              Refresh Keys
+            </Button>
+          </div>
+
+          {keysError && (
+            <Alert tone="danger" title="Key Registry Error" className="mb-4">
+              {keysError}
+            </Alert>
+          )}
+
+          {keys.length === 0 ? (
+            <div className="text-center py-6 text-sm text-ink-500 bg-ink-50 rounded-lg">
+              No trust anchor keys currently registered or returned.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b bg-ink-50 text-ink-700">
+                    <th className="py-2.5 px-3 font-semibold">Key ID</th>
+                    <th className="py-2.5 px-3 font-semibold">Purpose</th>
+                    <th className="py-2.5 px-3 font-semibold">Status</th>
+                    <th className="py-2.5 px-3 font-semibold">Owner</th>
+                    <th className="py-2.5 px-3 font-semibold">Algorithm</th>
+                    <th className="py-2.5 px-3 font-semibold">Fingerprint</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-ink-100">
+                  {keys.map((k) => (
+                    <tr key={k.id} className="hover:bg-ink-50/50">
+                      <td className="py-2 px-3 font-mono font-semibold text-ink-900">{k.keyId}</td>
+                      <td className="py-2 px-3">
+                        <Badge tone="accent">{k.purpose}</Badge>
+                      </td>
+                      <td className="py-2 px-3">
+                        <Badge
+                          tone={
+                            k.status === 'ACTIVE'
+                              ? 'success'
+                              : k.status === 'RETIRED'
+                              ? 'warning'
+                              : 'danger'
+                          }
+                        >
+                          {k.status}
+                        </Badge>
+                      </td>
+                      <td className="py-2 px-3 text-ink-700">{k.ownerId}</td>
+                      <td className="py-2 px-3 font-mono text-ink-600">{k.algorithm}</td>
+                      <td className="py-2 px-3 font-mono text-ink-500 text-[10px] truncate max-w-[140px]">
+                        {k.fingerprint}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Capability Decisions Table (Preserved exactly for audit / architectural compliance) */}
       <Card className="mt-5 overflow-hidden">
         <div className="border-ink-200 border-b p-5 sm:p-6">
           <div className="flex items-start gap-3">

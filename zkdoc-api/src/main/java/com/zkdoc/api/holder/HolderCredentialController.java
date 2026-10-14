@@ -33,20 +33,35 @@ public class HolderCredentialController {
     private final HolderCredentialService holderCredentialService;
     private final VerificationAuditService auditService;
     private final com.zkdoc.zkp.holder.PredicateProofGenerationService proofGenerationService;
+    private final com.zkdoc.api.ratelimit.RateLimitService rateLimitService;
+    private final com.zkdoc.api.metrics.ZkdocMetrics zkdocMetrics;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public HolderCredentialController(
+            HolderCredentialService holderCredentialService,
+            VerificationAuditService auditService,
+            com.zkdoc.zkp.holder.PredicateProofGenerationService proofGenerationService,
+            com.zkdoc.api.ratelimit.RateLimitService rateLimitService,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) com.zkdoc.api.metrics.ZkdocMetrics zkdocMetrics) {
+        this.holderCredentialService = holderCredentialService;
+        this.auditService = auditService;
+        this.proofGenerationService = proofGenerationService;
+        this.rateLimitService = rateLimitService;
+        this.zkdocMetrics = zkdocMetrics;
+    }
 
     public HolderCredentialController(
             HolderCredentialService holderCredentialService,
             VerificationAuditService auditService,
-            com.zkdoc.zkp.holder.PredicateProofGenerationService proofGenerationService) {
-        this.holderCredentialService = holderCredentialService;
-        this.auditService = auditService;
-        this.proofGenerationService = proofGenerationService;
+            com.zkdoc.zkp.holder.PredicateProofGenerationService proofGenerationService,
+            com.zkdoc.api.ratelimit.RateLimitService rateLimitService) {
+        this(holderCredentialService, auditService, proofGenerationService, rateLimitService, null);
     }
 
     @PostMapping("/provision")
     @PreAuthorize("hasRole('HOLDER') or hasRole('ADMIN')")
     public ResponseEntity<HolderCredentialResponse> provision(
-            @RequestBody ProvisionHolderCredentialRequest request,
+            @jakarta.validation.Valid @RequestBody ProvisionHolderCredentialRequest request,
             Authentication authentication) {
         String subject = authentication != null ? authentication.getName() : "anonymous";
         HolderId holderId = HolderId.of(subject);
@@ -115,7 +130,7 @@ public class HolderCredentialController {
     @PostMapping("/proofs/generate")
     @PreAuthorize("hasRole('HOLDER') or hasRole('ADMIN')")
     public ResponseEntity<HolderPredicateProofResponse> generateProof(
-            @RequestBody GeneratePredicateProofRequest request,
+            @jakarta.validation.Valid @RequestBody GeneratePredicateProofRequest request,
             Authentication authentication) {
         String subject = authentication != null ? authentication.getName() : "anonymous";
         HolderId holderId = HolderId.of(subject);
@@ -155,10 +170,20 @@ public class HolderCredentialController {
                 nonceBytes
         );
 
+        boolean acquired = rateLimitService.tryAcquireConcurrency(com.zkdoc.api.ratelimit.RateLimitCategory.ZKP_PROOF_GENERATION);
+        if (!acquired) {
+            auditService.record(authentication, "HOLDER_PREDICATE_PROOF_GENERATE_SATURATED", null, null, false);
+            throw new org.springframework.web.server.ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS, "Cryptographic proof generation capacity saturated");
+        }
+
+        long start = System.nanoTime();
         try {
             com.zkdoc.zkp.holder.HolderPredicateProof proof = proofGenerationService.generateProof(holderId, proofReq);
             auditService.record(authentication, "HOLDER_PREDICATE_PROOF_GENERATED",
                     proof.statement().credentialId().value(), null, true);
+            if (zkdocMetrics != null) {
+                zkdocMetrics.recordZkpProofGenerated(true, java.time.Duration.ofNanos(System.nanoTime() - start));
+            }
 
             HolderPredicateProofResponse resp = new HolderPredicateProofResponse(
                     proof.statement().holderCredentialId().value(),
@@ -180,15 +205,26 @@ public class HolderCredentialController {
         } catch (com.zkdoc.credential.HolderCredentialNotFoundException e) {
             auditService.record(authentication, "HOLDER_PREDICATE_PROOF_GENERATE_FAILED",
                     null, null, false);
+            if (zkdocMetrics != null) {
+                zkdocMetrics.recordZkpProofGenerated(false, java.time.Duration.ofNanos(System.nanoTime() - start));
+            }
             throw new org.springframework.web.server.ResponseStatusException(HttpStatus.NOT_FOUND, e.getMessage(), e);
         } catch (IllegalArgumentException e) {
             auditService.record(authentication, "HOLDER_PREDICATE_PROOF_GENERATE_FAILED",
                     null, null, false);
+            if (zkdocMetrics != null) {
+                zkdocMetrics.recordZkpProofGenerated(false, java.time.Duration.ofNanos(System.nanoTime() - start));
+            }
             throw new org.springframework.web.server.ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
         } catch (IllegalStateException e) {
             auditService.record(authentication, "HOLDER_PREDICATE_PROOF_GENERATE_FAILED",
                     null, null, false);
+            if (zkdocMetrics != null) {
+                zkdocMetrics.recordZkpProofGenerated(false, java.time.Duration.ofNanos(System.nanoTime() - start));
+            }
             throw new org.springframework.web.server.ResponseStatusException(HttpStatus.CONFLICT, e.getMessage(), e);
+        } finally {
+            rateLimitService.releaseConcurrency(com.zkdoc.api.ratelimit.RateLimitCategory.ZKP_PROOF_GENERATION);
         }
     }
 

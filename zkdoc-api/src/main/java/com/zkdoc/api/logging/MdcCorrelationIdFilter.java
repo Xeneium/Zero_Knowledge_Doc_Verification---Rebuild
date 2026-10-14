@@ -40,14 +40,19 @@ public class MdcCorrelationIdFilter extends OncePerRequestFilter {
         }
     }
 
+    private static final java.util.regex.Pattern SAFE_ID_PATTERN = java.util.regex.Pattern.compile("^[a-zA-Z0-9_-]{1,64}$");
+
     private String resolveCorrelationId(HttpServletRequest request) {
         String correlationId = request.getHeader(CORRELATION_ID_HEADER);
         if (correlationId == null || correlationId.isBlank()) {
             correlationId = request.getHeader(REQUEST_ID_HEADER);
         }
-        if (correlationId == null || correlationId.isBlank()) {
-            correlationId = UUID.randomUUID().toString();
+        if (correlationId != null) {
+            correlationId = correlationId.trim();
+            if (SAFE_ID_PATTERN.matcher(correlationId).matches()) {
+                return correlationId;
+            }
         }
-        return correlationId.trim();
+        return UUID.randomUUID().toString();
     }
 }

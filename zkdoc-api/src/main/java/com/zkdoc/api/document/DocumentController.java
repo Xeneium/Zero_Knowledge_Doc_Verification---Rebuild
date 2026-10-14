@@ -27,25 +27,53 @@ public class DocumentController {
     private final DocumentUploadService documentUploadService;
     private final QrCodeService qrCodeService;
     private final VerificationAuditService verificationAuditService;
+    private final com.zkdoc.api.security.ObjectAuthorizationService objectAuthorizationService;
+    private final com.zkdoc.api.metrics.ZkdocMetrics zkdocMetrics;
     private final String publicVerificationBaseUrl;
 
     public DocumentController(
             DocumentUploadService documentUploadService,
             QrCodeService qrCodeService,
             VerificationAuditService verificationAuditService,
+            com.zkdoc.api.security.ObjectAuthorizationService objectAuthorizationService,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) com.zkdoc.api.metrics.ZkdocMetrics zkdocMetrics,
             @Value("${zkdoc.public-verification-base-url}") String publicVerificationBaseUrl) {
         this.documentUploadService = documentUploadService;
         this.qrCodeService = qrCodeService;
         this.verificationAuditService = verificationAuditService;
+        this.objectAuthorizationService = objectAuthorizationService;
+        this.zkdocMetrics = zkdocMetrics;
         this.publicVerificationBaseUrl = publicVerificationBaseUrl.replaceAll("/+$", "");
     }
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<UploadResponse> upload(@RequestParam("file") MultipartFile file) throws IOException {
-        DocumentRecord document = documentUploadService.upload(
-                file.getBytes(), file.getOriginalFilename(), file.getContentType());
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(new UploadResponse(document.id(), HexFormat.of().formatHex(document.digest())));
+    public ResponseEntity<UploadResponse> upload(
+            @RequestParam("file") MultipartFile file,
+            Authentication authentication) throws IOException {
+        if (file == null || file.isEmpty()) {
+            if (zkdocMetrics != null) {
+                zkdocMetrics.recordDocumentUpload(false, null);
+            }
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Upload file must not be empty");
+        }
+        long start = System.nanoTime();
+        try {
+            String ownerId = (authentication != null && authentication.getName() != null) ? authentication.getName() : "system";
+            DocumentRecord document = documentUploadService.upload(
+                    file.getBytes(), file.getOriginalFilename(), file.getContentType(), ownerId);
+            verificationAuditService.record(authentication, "DOCUMENT_UPLOADED", null, document.id(), true);
+            if (zkdocMetrics != null) {
+                zkdocMetrics.recordDocumentUpload(true, java.time.Duration.ofNanos(System.nanoTime() - start));
+            }
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(new UploadResponse(document.id(), HexFormat.of().formatHex(document.digest())));
+        } catch (Exception e) {
+            if (zkdocMetrics != null) {
+                zkdocMetrics.recordDocumentUpload(false, java.time.Duration.ofNanos(System.nanoTime() - start));
+            }
+            throw e;
+        }
     }
 
     @GetMapping("/{id}/verify")
@@ -64,6 +92,10 @@ public class DocumentController {
     public VerificationResult verifyUploadedCopy(@PathVariable UUID id, @RequestParam("file") MultipartFile file,
             Authentication authentication)
             throws IOException {
+        if (file == null || file.isEmpty()) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Verification copy file must not be empty");
+        }
         try {
             VerificationResult result = documentUploadService.verifyUploadedCopy(id, file.getBytes());
             verificationAuditService.record(authentication, "DOCUMENT_UPLOADED_COPY_VERIFY", null, id, result.verified());
@@ -75,7 +107,8 @@ public class DocumentController {
     }
 
     @GetMapping(value = "/{id}/qr", produces = MediaType.IMAGE_PNG_VALUE)
-    public byte[] publicVerificationQrCode(@PathVariable UUID id) {
+    public byte[] publicVerificationQrCode(@PathVariable UUID id, Authentication authentication) {
+        objectAuthorizationService.checkDocumentAccess(authentication, id);
         String token = documentUploadService.publicVerificationToken(id);
         return qrCodeService.pngFor(publicVerificationBaseUrl + "/api/public/verify/" + token);
     }

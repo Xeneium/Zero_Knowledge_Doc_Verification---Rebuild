@@ -8,14 +8,22 @@ import java.util.UUID;
 /**
  * Persistence record representing an issued credential stored in the relational database.
  * Explicitly separated from the pure in-memory domain Credential model.
+ * Enriched with explicit lifecycle audit timestamps and optimistic locking version.
  */
 public record StoredCredential(
         UUID credentialId,
+        String issuerId,
+        Instant issuedAt,
         Instant expiresAt,
         CredentialStatus status,
         byte[] canonicalPayload,
         byte[] digest,
-        byte[] signature) {
+        byte[] signature,
+        Instant suspendedAt,
+        String suspensionReason,
+        Instant revokedAt,
+        String revocationReason,
+        int version) {
 
     public StoredCredential {
         Objects.requireNonNull(credentialId, "credentialId must not be null");
@@ -28,6 +36,32 @@ public record StoredCredential(
         canonicalPayload = canonicalPayload.clone();
         digest = digest.clone();
         signature = signature.clone();
+    }
+
+    /**
+     * Backward-compatible constructor for existing tests and call sites.
+     */
+    public StoredCredential(
+            UUID credentialId,
+            Instant expiresAt,
+            CredentialStatus status,
+            byte[] canonicalPayload,
+            byte[] digest,
+            byte[] signature) {
+        this(
+                credentialId,
+                "system",
+                Instant.now(),
+                expiresAt,
+                status,
+                canonicalPayload,
+                digest,
+                signature,
+                null,
+                null,
+                null,
+                null,
+                1);
     }
 
     @Override
