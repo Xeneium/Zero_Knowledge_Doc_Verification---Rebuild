@@ -48,7 +48,9 @@ jobs:
 
       - name: Compile Backend for Java Analysis
         if: matrix.language == 'java-kotlin'
-        run: ./mvnw -B compile -DskipTests -Dfrontend.skip=true
+        run: |
+          chmod +x ./mvnw
+          ./mvnw -B compile -DskipTests -Dfrontend.skip=true
 
       - name: Perform CodeQL Security Analysis
         uses: github/codeql-action/analyze@cf12ceefebab2c867b9c35d7f907e059681d37ab # v3
