@@ -27,10 +27,17 @@ public class JdbcSecurityAuditService implements SecurityAuditService {
     private final JdbcTemplate jdbcTemplate;
     private final Clock clock;
     private final Object chainLock = new Object();
+    private LatestChainState cachedLatestState = null;
 
     public JdbcSecurityAuditService(JdbcTemplate jdbcTemplate, Clock clock) {
         this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
+    }
+
+    void invalidateCache() {
+        synchronized (chainLock) {
+            this.cachedLatestState = null;
+        }
     }
 
     @Override
@@ -62,10 +69,12 @@ public class JdbcSecurityAuditService implements SecurityAuditService {
         AuditEventCategory category = eventType.getCategory();
 
         synchronized (chainLock) {
-            // 2. Fetch latest sequence and hash to maintain unbroken hash chain
-            LatestChainState latest = fetchLatestChainState();
-            long sequenceNumber = latest.sequenceNumber() + 1;
-            String previousHash = latest.eventHash();
+            // 2. Fetch latest sequence and hash to maintain unbroken hash chain (cached under chainLock)
+            if (cachedLatestState == null) {
+                cachedLatestState = fetchLatestChainState();
+            }
+            long sequenceNumber = cachedLatestState.sequenceNumber() + 1;
+            String previousHash = cachedLatestState.eventHash();
 
             // 3. Construct canonical serialization and compute integrity hash
             String canonical = AuditCanonicalizer.canonicalize(
@@ -88,31 +97,39 @@ public class JdbcSecurityAuditService implements SecurityAuditService {
             String eventHash = AuditCanonicalizer.computeHash(previousHash, canonical);
 
             // 4. Atomic append to durable audit store
-            jdbcTemplate.update("""
-                    INSERT INTO security_audit_events (
-                        id, sequence_number, event_type, event_category, timestamp,
-                        actor_subject, actor_type, target_type, target_id, action,
-                        outcome, reason_code, correlation_id, client_ip_hash,
-                        metadata_json, previous_event_hash, event_hash
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    eventId.toString(),
-                    sequenceNumber,
-                    eventType.name(),
-                    category.name(),
-                    timestamp.toString(),
-                    actor,
-                    request.actorType().name(),
-                    request.targetType() != null ? request.targetType().name() : null,
-                    targetId,
-                    action,
-                    request.outcome().name(),
-                    reasonCode,
-                    correlationId,
-                    clientIpHash,
-                    metadataJson,
-                    previousHash,
-                    eventHash);
+            try {
+                jdbcTemplate.update("""
+                        INSERT INTO security_audit_events (
+                            id, sequence_number, event_type, event_category, timestamp,
+                            actor_subject, actor_type, target_type, target_id, action,
+                            outcome, reason_code, correlation_id, client_ip_hash,
+                            metadata_json, previous_event_hash, event_hash
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        eventId.toString(),
+                        sequenceNumber,
+                        eventType.name(),
+                        category.name(),
+                        timestamp.toString(),
+                        actor,
+                        request.actorType().name(),
+                        request.targetType() != null ? request.targetType().name() : null,
+                        targetId,
+                        action,
+                        request.outcome().name(),
+                        reasonCode,
+                        correlationId,
+                        clientIpHash,
+                        metadataJson,
+                        previousHash,
+                        eventHash);
+
+                cachedLatestState = new LatestChainState(sequenceNumber, eventHash);
+            } catch (RuntimeException e) {
+                // Invalidate cached state so subsequent retries re-query durable state
+                cachedLatestState = null;
+                throw e;
+            }
 
             return new SecurityAuditEvent(
                     eventId,

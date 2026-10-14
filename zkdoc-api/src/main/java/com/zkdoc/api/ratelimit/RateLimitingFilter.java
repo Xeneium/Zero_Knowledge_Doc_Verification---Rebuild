@@ -16,7 +16,6 @@ import java.io.IOException;
  * Filter enforcing endpoint-aware rate limiting across public verification and high-abuse endpoints.
  * Operates before expensive parsing or cryptographic validation.
  */
-@Component
 public class RateLimitingFilter extends OncePerRequestFilter {
 
     private final RateLimitService rateLimitService;
@@ -28,16 +27,16 @@ public class RateLimitingFilter extends OncePerRequestFilter {
     public RateLimitingFilter(
             RateLimitService rateLimitService,
             ClientIpResolver clientIpResolver,
-            @org.springframework.beans.factory.annotation.Autowired(required = false) com.zkdoc.api.audit.SecurityAuditService auditService,
-            @org.springframework.beans.factory.annotation.Autowired(required = false) com.zkdoc.api.metrics.ZkdocMetrics zkdocMetrics) {
+            java.util.Optional<com.zkdoc.api.audit.SecurityAuditService> auditService,
+            java.util.Optional<com.zkdoc.api.metrics.ZkdocMetrics> zkdocMetrics) {
         this.rateLimitService = rateLimitService;
         this.clientIpResolver = clientIpResolver;
-        this.auditService = auditService;
-        this.zkdocMetrics = zkdocMetrics;
+        this.auditService = auditService != null ? auditService.orElse(null) : null;
+        this.zkdocMetrics = zkdocMetrics != null ? zkdocMetrics.orElse(null) : null;
     }
 
     public RateLimitingFilter(RateLimitService rateLimitService, ClientIpResolver clientIpResolver) {
-        this(rateLimitService, clientIpResolver, null, null);
+        this(rateLimitService, clientIpResolver, java.util.Optional.empty(), java.util.Optional.empty());
     }
 
     @Override

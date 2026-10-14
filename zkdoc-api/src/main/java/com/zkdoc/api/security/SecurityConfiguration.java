@@ -98,6 +98,23 @@ public class SecurityConfiguration {
     }
 
     @Bean
+    public JwtAuthenticationFilter jwtAuthenticationFilter(
+            ManagedJwtDecoderProvider decoderProvider,
+            JwtAuthoritiesConverter authoritiesConverter,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) com.zkdoc.api.audit.SecurityAuditService auditService) {
+        return new JwtAuthenticationFilter(decoderProvider, authoritiesConverter, java.util.Optional.ofNullable(auditService));
+    }
+
+    @Bean
+    public com.zkdoc.api.ratelimit.RateLimitingFilter rateLimitingFilter(
+            com.zkdoc.api.ratelimit.RateLimitService rateLimitService,
+            com.zkdoc.api.ratelimit.ClientIpResolver clientIpResolver,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) com.zkdoc.api.audit.SecurityAuditService auditService,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) com.zkdoc.api.metrics.ZkdocMetrics zkdocMetrics) {
+        return new com.zkdoc.api.ratelimit.RateLimitingFilter(rateLimitService, clientIpResolver, java.util.Optional.ofNullable(auditService), java.util.Optional.ofNullable(zkdocMetrics));
+    }
+
+    @Bean
     public java.time.Clock clock() {
         return java.time.Clock.systemUTC();
     }

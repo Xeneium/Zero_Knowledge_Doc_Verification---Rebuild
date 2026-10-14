@@ -11,6 +11,7 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Authoritative cryptographic trust metadata record.
@@ -148,16 +149,22 @@ public record RegisteredKey(
                 Collections.emptyMap());
     }
 
+    private static final Map<String, PublicKey> PARSED_KEY_CACHE = new ConcurrentHashMap<>();
+
     /**
      * Converts the registered public key bytes into a parsed Java PublicKey instance.
+     * Caches the immutable PublicKey in memory to avoid repeated ASN.1 decoding and KeyFactory parsing.
      */
     public PublicKey toPublicKey() {
-        try {
-            X509EncodedKeySpec spec = new X509EncodedKeySpec(publicKeyDer());
-            return KeyFactory.getInstance("RSA").generatePublic(spec);
-        } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
-            throw new IllegalStateException("Failed to parse public key for keyId: " + keyId, e);
-        }
+        String cacheKey = (fingerprint != null && !fingerprint.isBlank()) ? fingerprint : keyId;
+        return PARSED_KEY_CACHE.computeIfAbsent(cacheKey, k -> {
+            try {
+                X509EncodedKeySpec spec = new X509EncodedKeySpec(publicKeyDer());
+                return KeyFactory.getInstance("RSA").generatePublic(spec);
+            } catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
+                throw new IllegalStateException("Failed to parse public key for keyId: " + keyId, e);
+            }
+        });
     }
 
     @Override

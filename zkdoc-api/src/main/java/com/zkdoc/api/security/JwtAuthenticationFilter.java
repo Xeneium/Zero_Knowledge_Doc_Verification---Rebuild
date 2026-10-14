@@ -25,7 +25,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
  * allowlists via {@link JwtAuthoritiesConverter}, populates a safe {@link AuthenticatedUser} principal,
  * and ensures raw tokens or credentials are never retained in the security context.
  */
-@Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
@@ -38,10 +37,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     public JwtAuthenticationFilter(
             ManagedJwtDecoderProvider decoderProvider,
             JwtAuthoritiesConverter authoritiesConverter,
-            @org.springframework.beans.factory.annotation.Autowired(required = false) com.zkdoc.api.audit.SecurityAuditService auditService) {
+            java.util.Optional<com.zkdoc.api.audit.SecurityAuditService> auditService) {
         this.decoderProvider = Objects.requireNonNull(decoderProvider, "decoderProvider must not be null");
         this.authoritiesConverter = Objects.requireNonNull(authoritiesConverter, "authoritiesConverter must not be null");
-        this.auditService = auditService;
+        this.auditService = auditService != null ? auditService.orElse(null) : null;
+    }
+
+    public JwtAuthenticationFilter(
+            ManagedJwtDecoderProvider decoderProvider,
+            JwtAuthoritiesConverter authoritiesConverter) {
+        this(decoderProvider, authoritiesConverter, java.util.Optional.empty());
     }
 
     @Override
