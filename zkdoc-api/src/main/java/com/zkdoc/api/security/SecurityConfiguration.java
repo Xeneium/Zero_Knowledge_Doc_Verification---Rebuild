@@ -36,16 +36,21 @@ public class SecurityConfiguration {
                 .exceptionHandling(exception -> exception
                         .authenticationEntryPoint((request, response, error) -> {
                             if (auditService != null) {
-                                auditService.record(com.zkdoc.api.audit.AuditEventRequest
-                                        .builder(com.zkdoc.api.audit.AuditEventType.AUTHENTICATION_FAILURE)
-                                        .actor("anonymous", com.zkdoc.api.audit.ActorType.ANONYMOUS_PUBLIC)
-                                        .target(com.zkdoc.api.audit.TargetType.SYSTEM, request.getRequestURI())
-                                        .action("AUTHENTICATE")
-                                        .outcome(com.zkdoc.api.audit.AuditOutcome.FAILURE)
-                                        .reasonCode("UNAUTHORIZED")
-                                        .correlationId(org.slf4j.MDC.get(com.zkdoc.api.logging.MdcCorrelationIdFilter.MDC_KEY))
-                                        .clientIp(request.getRemoteAddr())
-                                        .build());
+                                try {
+                                    auditService.record(com.zkdoc.api.audit.AuditEventRequest
+                                            .builder(com.zkdoc.api.audit.AuditEventType.AUTHENTICATION_FAILURE)
+                                            .actor("anonymous", com.zkdoc.api.audit.ActorType.ANONYMOUS_PUBLIC)
+                                            .target(com.zkdoc.api.audit.TargetType.SYSTEM, request.getRequestURI())
+                                            .action("AUTHENTICATE")
+                                            .outcome(com.zkdoc.api.audit.AuditOutcome.FAILURE)
+                                            .reasonCode("UNAUTHORIZED")
+                                            .correlationId(org.slf4j.MDC.get(com.zkdoc.api.logging.MdcCorrelationIdFilter.MDC_KEY))
+                                            .clientIp(request.getRemoteAddr())
+                                            .build());
+                                } catch (Exception ex) {
+                                    org.slf4j.LoggerFactory.getLogger(SecurityConfiguration.class)
+                                            .warn("Failed to record authentication failure audit event: {}", ex.getMessage());
+                                }
                             }
                             if (zkdocMetrics != null) {
                                 zkdocMetrics.recordAuthFailure();
@@ -56,19 +61,24 @@ public class SecurityConfiguration {
                         })
                         .accessDeniedHandler((request, response, error) -> {
                             if (auditService != null) {
-                                org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
-                                String caller = (auth != null && auth.isAuthenticated()) ? auth.getName() : "anonymous";
-                                com.zkdoc.api.audit.ActorType actorType = (auth != null && auth.isAuthenticated()) ? com.zkdoc.api.audit.ActorType.USER : com.zkdoc.api.audit.ActorType.ANONYMOUS_PUBLIC;
-                                auditService.record(com.zkdoc.api.audit.AuditEventRequest
-                                        .builder(com.zkdoc.api.audit.AuditEventType.ACCESS_DENIED)
-                                        .actor(caller, actorType)
-                                        .target(com.zkdoc.api.audit.TargetType.SYSTEM, request.getRequestURI())
-                                        .action("ACCESS_CHECK")
-                                        .outcome(com.zkdoc.api.audit.AuditOutcome.DENIED)
-                                        .reasonCode("FORBIDDEN")
-                                        .correlationId(org.slf4j.MDC.get(com.zkdoc.api.logging.MdcCorrelationIdFilter.MDC_KEY))
-                                        .clientIp(request.getRemoteAddr())
-                                        .build());
+                                try {
+                                    org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+                                    String caller = (auth != null && auth.isAuthenticated()) ? auth.getName() : "anonymous";
+                                    com.zkdoc.api.audit.ActorType actorType = (auth != null && auth.isAuthenticated()) ? com.zkdoc.api.audit.ActorType.USER : com.zkdoc.api.audit.ActorType.ANONYMOUS_PUBLIC;
+                                    auditService.record(com.zkdoc.api.audit.AuditEventRequest
+                                            .builder(com.zkdoc.api.audit.AuditEventType.ACCESS_DENIED)
+                                            .actor(caller, actorType)
+                                            .target(com.zkdoc.api.audit.TargetType.SYSTEM, request.getRequestURI())
+                                            .action("ACCESS_CHECK")
+                                            .outcome(com.zkdoc.api.audit.AuditOutcome.DENIED)
+                                            .reasonCode("FORBIDDEN")
+                                            .correlationId(org.slf4j.MDC.get(com.zkdoc.api.logging.MdcCorrelationIdFilter.MDC_KEY))
+                                            .clientIp(request.getRemoteAddr())
+                                            .build());
+                                } catch (Exception ex) {
+                                    org.slf4j.LoggerFactory.getLogger(SecurityConfiguration.class)
+                                            .warn("Failed to record access denied audit event: {}", ex.getMessage());
+                                }
                             }
                             if (zkdocMetrics != null) {
                                 zkdocMetrics.recordAccessDenied();
