@@ -82,7 +82,7 @@ public class SecurityConfiguration {
                         .requestMatchers("/api/health", "/actuator/health", "/actuator/health/**", "/actuator/info", "/api/public/**").permitAll()
                         .requestMatchers("/actuator/metrics", "/actuator/metrics/**", "/actuator/prometheus").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/credentials/*/suspend", "/api/credentials/*/resume", "/api/credentials/*/revoke").hasAnyRole("ISSUER", "ADMIN")
-                        .requestMatchers(HttpMethod.POST, "/api/documents", "/api/credentials").hasRole("ISSUER")
+                        .requestMatchers(HttpMethod.POST, "/api/documents", "/api/credentials", "/api/credentials/issue").hasRole("ISSUER")
                         .requestMatchers("/api/capabilities/**").hasAnyRole("ISSUER", "HOLDER", "ADMIN")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/holder/**").hasAnyRole("HOLDER", "ADMIN")

@@ -39,7 +39,7 @@ public class KeyRegistryAdminController {
         this.keyRegistry = keyRegistry;
     }
 
-    @PostMapping
+    @PostMapping({"", "/register"})
     public ResponseEntity<KeyRegisteredResponse> register(@jakarta.validation.Valid @RequestBody KeyRegistrationRequest request) {
         byte[] der = RegisteredKey.decodePemToDer(request.publicKeyPem());
         String fingerprint = KeyFingerprint.fromDer(der).value();

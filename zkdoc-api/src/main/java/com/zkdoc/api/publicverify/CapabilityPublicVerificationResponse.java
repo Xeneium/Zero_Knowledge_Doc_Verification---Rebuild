@@ -35,4 +35,9 @@ public record CapabilityPublicVerificationResponse(
                 reason
         );
     }
+
+    @com.fasterxml.jackson.annotation.JsonProperty("valid")
+    public boolean valid() {
+        return verified;
+    }
 }

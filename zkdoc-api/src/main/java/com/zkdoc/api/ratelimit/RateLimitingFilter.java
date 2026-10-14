@@ -70,7 +70,7 @@ public class RateLimitingFilter extends OncePerRequestFilter {
         }
 
         // 3. Check if holder proof generation (/api/holder/credentials/proofs/generate)
-        else if (path.equals("/api/holder/credentials/proofs/generate") && "POST".equalsIgnoreCase(request.getMethod())) {
+        else if ((path.equals("/api/holder/credentials/proofs/generate") || path.equals("/api/holder/credentials/generate-predicate-proof")) && "POST".equalsIgnoreCase(request.getMethod())) {
             String caller = resolveCallerIdentity(request);
             RateLimitKey key = RateLimitKey.of(RateLimitCategory.ZKP_PROOF_GENERATION, caller);
             RateLimitDecision decision = rateLimitService.tryAcquire(key);
@@ -94,7 +94,7 @@ public class RateLimitingFilter extends OncePerRequestFilter {
         }
 
         // 5. Check if credential issuance (/api/credentials)
-        else if (path.equals("/api/credentials") && "POST".equalsIgnoreCase(request.getMethod())) {
+        else if ((path.equals("/api/credentials") || path.equals("/api/credentials/issue")) && "POST".equalsIgnoreCase(request.getMethod())) {
             String caller = resolveCallerIdentity(request);
             RateLimitKey key = RateLimitKey.of(RateLimitCategory.CREDENTIAL_ISSUANCE, caller);
             RateLimitDecision decision = rateLimitService.tryAcquire(key);

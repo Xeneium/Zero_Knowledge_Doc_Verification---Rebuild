@@ -141,7 +141,7 @@ class ApiValidationAndErrorSecurityTest {
 
         @Test
         @DisplayName("Empty file upload is rejected with 400 Bad Request")
-        @WithMockUser(username = "holder-1", roles = "HOLDER")
+        @WithMockUser(username = "issuer-1", roles = "ISSUER")
         void emptyFileUploadRejected() throws Exception {
             MockMultipartFile emptyFile = new MockMultipartFile(
                     "file", "empty.pdf", "application/pdf", new byte[0]);

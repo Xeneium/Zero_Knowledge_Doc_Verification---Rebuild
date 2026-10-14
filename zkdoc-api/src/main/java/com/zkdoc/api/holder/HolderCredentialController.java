@@ -127,7 +127,7 @@ public class HolderCredentialController {
         return toResponse(hc);
     }
 
-    @PostMapping("/proofs/generate")
+    @PostMapping({"/proofs/generate", "/generate-predicate-proof"})
     @PreAuthorize("hasRole('HOLDER') or hasRole('ADMIN')")
     public ResponseEntity<HolderPredicateProofResponse> generateProof(
             @jakarta.validation.Valid @RequestBody GeneratePredicateProofRequest request,

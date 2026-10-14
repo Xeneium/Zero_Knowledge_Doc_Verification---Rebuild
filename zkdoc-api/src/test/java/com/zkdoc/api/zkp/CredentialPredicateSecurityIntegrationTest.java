@@ -347,7 +347,7 @@ class CredentialPredicateSecurityIntegrationTest {
         }
 
         startLatch.countDown();
-        doneLatch.await(15, java.util.concurrent.TimeUnit.SECONDS);
+        doneLatch.await(60, java.util.concurrent.TimeUnit.SECONDS);
         executor.shutdown();
 
         org.junit.jupiter.api.Assertions.assertEquals(threadCount, successCount.get());

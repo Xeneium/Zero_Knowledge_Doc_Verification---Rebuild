@@ -68,7 +68,7 @@ public class CredentialController {
         this(credentialService, null, null, verificationAuditService, objectAuthorizationService, null);
     }
 
-    @PostMapping
+    @PostMapping({"", "/issue"})
     public ResponseEntity<IssueCredentialResponse> issue(
             @jakarta.validation.Valid @RequestBody IssueCredentialRequest request,
             Authentication authentication) {
