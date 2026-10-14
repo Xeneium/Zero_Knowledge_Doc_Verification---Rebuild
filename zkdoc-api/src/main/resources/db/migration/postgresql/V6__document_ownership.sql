@@ -4,8 +4,21 @@
 -- Phase 12: Authentication, Authorization & Object-Level Security
 -- ==============================================================================
 
--- 1. Add owner_id to document_records for object-level authorization (BOLA/IDOR defense)
-ALTER TABLE document_records ADD COLUMN IF NOT EXISTS owner_id VARCHAR(128) DEFAULT 'system';
+-- 1. Create document_records table if not exists for JdbcDocumentStore compatibility
+CREATE TABLE IF NOT EXISTS document_records (
+    id VARCHAR(64) PRIMARY KEY,
+    content BYTEA NOT NULL,
+    digest VARCHAR(64) NOT NULL,
+    signature BYTEA NOT NULL,
+    public_token VARCHAR(64),
+    active BOOLEAN DEFAULT TRUE,
+    owner_id VARCHAR(128) DEFAULT 'system',
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
 
--- 2. Index for efficient owner-scoped document queries
+ALTER TABLE document_records ADD COLUMN IF NOT EXISTS owner_id VARCHAR(128) DEFAULT 'system';
 CREATE INDEX IF NOT EXISTS idx_document_records_owner ON document_records(owner_id);
+
+-- 2. Add owner_id to documents table for canonical document records
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS owner_id VARCHAR(128) DEFAULT 'system';
+CREATE INDEX IF NOT EXISTS idx_documents_owner ON documents(owner_id);

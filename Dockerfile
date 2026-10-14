@@ -14,7 +14,6 @@ RUN apk add --no-cache bash nodejs npm maven
 # Copy Maven wrapper and root POM
 COPY mvnw ./
 COPY mvnw.cmd ./
-COPY .mvn ./.mvn
 COPY pom.xml ./
 
 # Copy module POMs
