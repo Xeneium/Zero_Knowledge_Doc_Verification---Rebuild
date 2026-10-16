@@ -14,7 +14,7 @@
 
 A multi-module Java platform implementing **Pedersen commitments**, **Bulletproof range proofs**, **RSASSA-PSS digital signatures**, and **minimal-disclosure verification capabilities** for enterprise-grade zero-knowledge document verification.
 
-[Getting Started](#-getting-started) · [Architecture](#-architecture) · [API Reference](#-api-reference) · [Security](#-security-model)
+[Getting Started](#-getting-started) · [Demo & Evaluation Guide](docs/demo/README-demo.md) · [Architecture](#-architecture) · [API Reference](#-api-reference) · [Security](#-security-model)
 
 </div>
 
@@ -23,6 +23,7 @@ A multi-module Java platform implementing **Pedersen commitments**, **Bulletproo
 ## 📑 Table of Contents
 
 - [Overview](#-overview)
+- [Demo & Presentation Guide](docs/demo/README-demo.md)
 - [Features](#-features)
 - [Architecture](#-architecture)
 - [Tech Stack](#-tech-stack)
@@ -263,6 +264,15 @@ Zero Knowledge Document Verification/
 ---
 
 ## 🚀 Getting Started
+
+> [!TIP]
+> **Preparing a Live Demonstration or Evaluation?**  
+> Check out the **[Demo & Evaluation Guide](docs/demo/README-demo.md)**. You can launch a fully seeded demonstration environment with pre-configured accounts across all four roles in under 60 seconds:
+> ```powershell
+> .\scripts\demo-setup.ps1      # Windows (PowerShell)
+> ./scripts/demo-setup.sh       # Linux / macOS (Bash)
+> ```
+> Includes synthetic PDF fixtures (`demo/fixtures/`), tamper detection examples, an [8–12 Minute Live Presentation Script](docs/demo/demo-presentation-script.md), and a [Viva Defense Q&A Guide](docs/demo/demo-viva-questions.md).
 
 ### Prerequisites
 

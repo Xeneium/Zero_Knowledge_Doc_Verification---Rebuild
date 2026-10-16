@@ -1,0 +1,60 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R >> >> /MediaBox [0 0 612 792] /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+5 0 obj
+<< /Length 746 >>
+stream
+BT
+/F1 22 Tf
+50 720 Td
+(APEX GLOBAL CERTIFICATION AUTHORITY) Tj
+/F1 16 Tf
+0 -36 Td
+(CERTIFIED CLOUD SECURITY ARCHITECT) Tj
+/F1 12 Tf
+0 -40 Td
+(This certifies that) Tj
+/F1 18 Tf
+0 -28 Td
+(Alice Chen) Tj
+/F1 12 Tf
+0 -30 Td
+(has fulfilled all requirements and is awarded this credential with all honors.) Tj
+0 -24 Td
+(Credential ID: APX-2024-88421 | Certification Date: June 1, 2024 | Score: 94%) Tj
+0 -40 Td
+(Authoritative Issuer ID: urn:zkdoc:issuer:acme-university) Tj
+0 -20 Td
+(Verification Standard: SHA-256 Digest + RSASSA-PSS RFC 8017) Tj
+/F1 10 Tf
+0 -50 Td
+(*** DEMO DOCUMENT - SYNTHETIC DATA - NOT AN OFFICIAL CERTIFICATE ***) Tj
+0 -16 Td
+(Notice: This document contains purely synthetic test data. It is not an official credential.) Tj
+ET
+
+endstream
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000000311 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1108
+%%EOF

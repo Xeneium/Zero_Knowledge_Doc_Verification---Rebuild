@@ -12,6 +12,12 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5173,
       strictPort: true,
+      headers: {
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+        'Permissions-Policy': 'camera=(self), microphone=(), geolocation=()',
+      },
       proxy: {
         '/api': {
           target: proxyTarget,
@@ -22,6 +28,12 @@ export default defineConfig(({ mode }) => {
     preview: {
       port: 4173,
       strictPort: true,
+      headers: {
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+        'Permissions-Policy': 'camera=(self), microphone=(), geolocation=()',
+      },
     },
     build: {
       outDir: '../zkdoc-api/src/main/resources/static',
@@ -33,6 +45,8 @@ export default defineConfig(({ mode }) => {
       globals: true,
       environment: 'jsdom',
       setupFiles: ['./tests/setup.ts'],
+      include: ['tests/**/*.{test,spec}.{ts,tsx}'],
+      exclude: ['**/node_modules/**', '**/dist/**', 'legacy-reference/**'],
       css: true,
       restoreMocks: true,
       clearMocks: true,

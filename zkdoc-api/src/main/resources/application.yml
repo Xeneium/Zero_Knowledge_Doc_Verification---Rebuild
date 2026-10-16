@@ -44,6 +44,14 @@ zkdoc:
   storage:
     type: ${ZKDOC_STORAGE_TYPE:filesystem}
     base-dir: ${ZKDOC_STORAGE_BASE_DIR:./data/artifacts}
+    filesystem:
+      base-dir: ${ZKDOC_STORAGE_BASE_DIR:./data/artifacts}
+    encryption:
+      enabled: ${ZKDOC_STORAGE_ENCRYPTION_ENABLED:true}
+      key-id: ${ZKDOC_STORAGE_ENCRYPTION_KEY_ID:default-storage-key}
+      master-key: ${ZKDOC_STORAGE_ENCRYPTION_KEY:}
+  demo:
+    seed-enabled: ${ZKDOC_DEMO_SEED_ENABLED:false}
 
 ---
 # Local Development Profile (SQLite)
@@ -79,3 +87,7 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration/postgresql
+
+zkdoc:
+  demo:
+    seed-enabled: false

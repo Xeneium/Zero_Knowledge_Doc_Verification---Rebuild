@@ -18,5 +18,5 @@
     "types": ["vite/client", "vitest/globals", "@testing-library/jest-dom"]
   },
   "include": ["src", "tests", "vite.config.ts", "eslint.config.js"],
-  "exclude": ["dist", "node_modules"]
+  "exclude": ["dist", "node_modules", "legacy-reference"]
 }

@@ -17,7 +17,7 @@ import org.junit.jupiter.api.condition.EnabledIf;
  * execute successfully and establish all required foundation tables.
  */
 @SpringBootTest(classes = Application.class)
-@EnabledIf(value = "isDockerAvailable", disabledReason = "Docker daemon is not running on this host; test will execute in CI.")
+@EnabledIf(value = "isPostgresAvailable", disabledReason = "Neither Docker daemon nor ZKDOC_TEST_POSTGRES_URL is available on this host; test will execute in CI/PostgreSQL environment.")
 class PostgresFlywayMigrationIntegrationTest extends AbstractPostgresIntegrationTest {
 
     @Autowired

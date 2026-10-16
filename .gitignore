@@ -79,6 +79,14 @@ test-reports/
 backups/
 *.tar.gz
 
+# === Temporary & Cache Files ===
+*.tmp
+*.bak
+*.swp
+*~
+.vitest/
+frontend/.vitest/
+
 # === Maven Wrapper ===
 !.mvn/wrapper/maven-wrapper.jar
 !.mvn/wrapper/maven-wrapper.properties

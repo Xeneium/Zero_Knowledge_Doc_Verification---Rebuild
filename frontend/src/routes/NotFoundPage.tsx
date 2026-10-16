@@ -1,31 +1,23 @@
-import { ArrowLeft, Compass } from 'lucide-react';
+import React from 'react';
 import { Link } from 'react-router';
-import { Card } from '../components/ui/Card';
+import { AlertCircle } from 'lucide-react';
 
-export function NotFoundPage() {
+export const NotFoundPage: React.FC = () => {
   return (
-    <div className="mx-auto flex min-h-[60vh] max-w-2xl items-center justify-center">
-      <Card className="w-full px-6 py-12 text-center sm:px-10">
-        <span className="bg-accent-50 text-accent-700 mx-auto inline-flex size-14 items-center justify-center rounded-xl">
-          <Compass className="size-7" aria-hidden="true" />
-        </span>
-        <p className="text-accent-700 mt-5 text-sm font-bold tracking-widest uppercase">
-          404 · Route not found
-        </p>
-        <h1 className="text-ink-950 mt-2 text-3xl font-bold tracking-tight">
-          This path is outside the workspace
-        </h1>
-        <p className="text-ink-600 mx-auto mt-3 max-w-md">
-          The page may have moved, or the address may be incomplete. Return to
-          the overview to continue.
-        </p>
-        <Link
-          to="/"
-          className="bg-accent-600 hover:bg-accent-700 mt-7 inline-flex min-h-11 items-center gap-2 rounded-lg px-4 text-sm font-semibold text-white"
-        >
-          <ArrowLeft className="size-4" aria-hidden="true" /> Return to overview
-        </Link>
-      </Card>
+    <div className="mx-auto max-w-md py-12 text-center">
+      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100 text-red-600">
+        <AlertCircle className="h-6 w-6" aria-hidden="true" />
+      </div>
+      <h1 className="mb-2 text-2xl font-bold text-slate-900">Page Not Found</h1>
+      <p className="mb-6 text-sm text-slate-600">
+        The requested verification route does not exist or has been moved.
+      </p>
+      <Link
+        to="/"
+        className="inline-flex min-h-[44px] items-center justify-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-indigo-700 focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2 focus-visible:outline-none"
+      >
+        Return to Overview
+      </Link>
     </div>
   );
-}
+};

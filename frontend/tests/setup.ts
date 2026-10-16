@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest';
-import { afterEach, beforeEach, vi } from 'vitest';
+import { afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 
 Object.defineProperty(window, 'matchMedia', {
@@ -16,17 +16,15 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 });
 
-beforeEach(() => {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ status: 'ok' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      }),
-    ),
-  );
-});
+if (typeof window !== 'undefined' && window.URL) {
+  window.URL.createObjectURL = vi.fn(() => 'blob:mock-url');
+  window.URL.revokeObjectURL = vi.fn();
+}
+
+if (typeof globalThis !== 'undefined' && globalThis.URL) {
+  globalThis.URL.createObjectURL = vi.fn(() => 'blob:mock-url');
+  globalThis.URL.revokeObjectURL = vi.fn();
+}
 
 afterEach(() => {
   cleanup();

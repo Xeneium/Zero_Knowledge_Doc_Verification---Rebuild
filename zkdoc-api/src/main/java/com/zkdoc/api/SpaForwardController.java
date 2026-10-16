@@ -8,12 +8,17 @@ import org.springframework.web.bind.annotation.GetMapping;
 public class SpaForwardController {
     @GetMapping({
             "/",
+            "/login",
             "/verify",
             "/credentials",
             "/verification",
             "/predicate-verification",
             "/audit-logs",
-            "/administration"
+            "/administration",
+            "/admin",
+            "/issuer",
+            "/holder",
+            "/forbidden"
     })
     public String forwardClientRoute() {
         return "forward:/index.html";

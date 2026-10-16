@@ -35,9 +35,27 @@ public abstract class AbstractPostgresIntegrationTest {
         }
     }
 
+    public static boolean isPostgresAvailable() {
+        String extUrl = System.getenv("ZKDOC_TEST_POSTGRES_URL");
+        if (extUrl != null && !extUrl.isBlank()) {
+            return true;
+        }
+        return isDockerAvailable();
+    }
+
     @DynamicPropertySource
     static void configurePostgres(DynamicPropertyRegistry registry) {
-        if (isDockerAvailable() && postgres.isRunning()) {
+        String extUrl = System.getenv("ZKDOC_TEST_POSTGRES_URL");
+        if (extUrl != null && !extUrl.isBlank()) {
+            String user = System.getenv().getOrDefault("ZKDOC_TEST_POSTGRES_USER", "zkdoc_app");
+            String pass = System.getenv().getOrDefault("ZKDOC_TEST_POSTGRES_PASSWORD", "");
+            registry.add("spring.datasource.url", () -> extUrl);
+            registry.add("spring.datasource.username", () -> user);
+            registry.add("spring.datasource.password", () -> pass);
+            registry.add("spring.datasource.driver-class-name", () -> "org.postgresql.Driver");
+            registry.add("spring.flyway.enabled", () -> "true");
+            registry.add("spring.flyway.locations", () -> "classpath:db/migration/postgresql");
+        } else if (isDockerAvailable() && postgres != null && postgres.isRunning()) {
             registry.add("spring.datasource.url", postgres::getJdbcUrl);
             registry.add("spring.datasource.username", postgres::getUsername);
             registry.add("spring.datasource.password", postgres::getPassword);

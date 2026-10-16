@@ -1,19 +1,16 @@
-import { StrictMode } from 'react';
-import { createRoot } from 'react-dom/client';
+import React from 'react';
+import ReactDOM from 'react-dom/client';
 import { App } from './app/App';
-import { AppProviders } from './app/providers';
-import './styles/globals.css';
+import './styles/index.css';
 
-const root = document.getElementById('root');
+const rootElement = document.getElementById('root');
 
-if (!root) {
-  throw new Error('Application root element was not found.');
+if (!rootElement) {
+  throw new Error('Fatal error: Failed to find document root element "#root"');
 }
 
-createRoot(root).render(
-  <StrictMode>
-    <AppProviders>
-      <App />
-    </AppProviders>
-  </StrictMode>,
+ReactDOM.createRoot(rootElement).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
 );

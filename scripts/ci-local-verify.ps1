@@ -94,7 +94,7 @@ Write-Host "`n[Step 5/7] Running secret scanning and credential hygiene check...
 $suspects = Get-ChildItem -Path $root -Recurse -Include "*.java", "*.yml", "*.yaml", "*.properties", "*.json", "*.env" `
     -Exclude "node_modules", "target", ".git" |
     Select-String -Pattern "BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY" |
-    Where-Object { $_.Path -notlike "*AuditDataMinimizationSecurityTest.java" }
+    Where-Object { $_.Path -notlike "*AuditDataMinimizationSecurityTest.java" -and $_.Path -notlike "*BackupRecoveryIntegrationTest.java" }
 
 if ($suspects) {
     Write-Host "  POTENTIAL SECRET DETECTED:" -ForegroundColor Red
@@ -108,7 +108,7 @@ if ($suspects) {
 Write-Host "`n[Step 6/7] Validating container configuration..." -ForegroundColor Yellow
 if (Test-Path "$root\Dockerfile") {
     $dockerfile = Get-Content "$root\Dockerfile" -Raw
-    if ($dockerfile -match "USER zkdoc:zkdoc" -and $dockerfile -match "HEALTHCHECK") {
+    if ($dockerfile -match "USER (zkdoc:zkdoc|10001:10001)" -and $dockerfile -match "HEALTHCHECK") {
         Write-Host "  Dockerfile conforms to unprivileged runtime and healthcheck standards." -ForegroundColor Green
     } else {
         Write-Warning "Dockerfile missing unprivileged USER or HEALTHCHECK."

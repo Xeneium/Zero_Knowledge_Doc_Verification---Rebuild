@@ -64,7 +64,7 @@ cat "${ROOT_DIR}/target/sbom-checksums.sha256"
 # 5. Secret Hygiene
 echo ""
 echo "[Step 5/7] Running secret scanning and credential hygiene check..."
-if grep -rn "BEGIN RSA PRIVATE KEY" "${ROOT_DIR}/src" "${ROOT_DIR}/zkdoc-" 2>/dev/null | grep -v "AuditDataMinimizationSecurityTest"; then
+if grep -rn "BEGIN RSA PRIVATE KEY" "${ROOT_DIR}/src" "${ROOT_DIR}/zkdoc-" 2>/dev/null | grep -v "AuditDataMinimizationSecurityTest" | grep -v "BackupRecoveryIntegrationTest"; then
   echo "Error: Potential private key secret detected." >&2
   exit 1
 fi

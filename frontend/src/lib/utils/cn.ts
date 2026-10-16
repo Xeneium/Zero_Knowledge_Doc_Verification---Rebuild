@@ -1,5 +1,5 @@
 export function cn(
-  ...values: Array<string | false | null | undefined>
+  ...classes: Array<string | boolean | undefined | null>
 ): string {
-  return values.filter(Boolean).join(' ');
+  return classes.filter(Boolean).join(' ');
 }

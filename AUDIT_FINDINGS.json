@@ -1,0 +1,151 @@
+[
+  {
+    "findingId": "FIND-001",
+    "title": "Unauthenticated Public Demo Tokens Endpoint Enabled by Default",
+    "severity": "HIGH",
+    "confidence": "CONFIRMED",
+    "status": "OPEN",
+    "component": "zkdoc-api",
+    "file": "zkdoc-api/src/main/resources/application.yml",
+    "line": 50,
+    "cwe": "CWE-1188",
+    "owasp": "A01:2021-Broken Access Control",
+    "cvss40": {
+      "score": 8.7,
+      "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:N/SC:N/SI:N/SA:N"
+    },
+    "description": "The configuration property zkdoc.demo.seed-enabled defaults to true (${ZKDOC_DEMO_SEED_ENABLED:true}). When active, DemoTokensController exposes GET /api/public/demo-tokens without authentication, dispensing valid RSA-2048-signed Bearer JWT tokens for all roles including ADMIN.",
+    "impact": "If deployed to production without explicitly overriding ZKDOC_DEMO_SEED_ENABLED=false, an anonymous remote attacker can obtain full administrative access to key management and audit operations.",
+    "recommendation": "Invert the configuration default to false in application.yml (${ZKDOC_DEMO_SEED_ENABLED:false}) and require explicit opt-in for demo environments."
+  },
+  {
+    "findingId": "FIND-002",
+    "title": "Default Static Database Credentials in Docker Compose Manifest",
+    "severity": "MEDIUM",
+    "confidence": "CONFIRMED",
+    "status": "OPEN",
+    "component": "docker-compose",
+    "file": "docker-compose.yml",
+    "line": 11,
+    "cwe": "CWE-798",
+    "owasp": "A07:2021-Identification and Authentication Failures",
+    "cvss40": {
+      "score": 6.9,
+      "vector": "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N"
+    },
+    "description": "docker-compose.yml specifies fallback default credentials POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-zkdoc_local_dev_secret} across postgres, api, and backup container definitions.",
+    "impact": "Deploying the containerized application without an explicit .env file causes PostgreSQL to boot with a known, hardcoded secret, allowing network-adjacent attackers to connect directly to the database.",
+    "recommendation": "Remove fallback default password literals from docker-compose.yml. Enforce mandatory environment variable injection and validate non-empty secret values in pre-flight scripts."
+  },
+  {
+    "findingId": "FIND-003",
+    "title": "Document Artifact Storage Filesystem Payloads Unencrypted at Rest",
+    "severity": "MEDIUM",
+    "confidence": "CONFIRMED",
+    "status": "OPEN",
+    "component": "zkdoc-document",
+    "file": "zkdoc-document/src/main/java/com/zkdoc/document/storage/FilesystemDocumentArtifactStorage.java",
+    "line": 59,
+    "cwe": "CWE-311",
+    "owasp": "A02:2021-Cryptographic Failures",
+    "cvss40": {
+      "score": 6.8,
+      "vector": "CVSS:4.0/AV:L/AC:L/AT:N/PR:L/UI:N/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N"
+    },
+    "description": "FilesystemDocumentArtifactStorage writes uploaded document bytes directly to disk in plaintext. While path traversal defense, atomic replacement, and SHA-256 integrity verification are enforced, confidentiality at rest is omitted.",
+    "impact": "If an attacker achieves local filesystem read access, volume backup leakage, or host compromise, confidential stored document files can be exfiltrated in plaintext.",
+    "recommendation": "Implement an envelope encryption stream decorator (AES-256-GCM) with an external KMS or environment-provided master key before writing artifact bytes to disk."
+  },
+  {
+    "findingId": "FIND-004",
+    "title": "Startup In-Process Asymmetric Key Generation and Non-HSM Private Key Storage",
+    "severity": "LOW",
+    "confidence": "CONFIRMED",
+    "status": "OPEN",
+    "component": "zkdoc-keys",
+    "file": "zkdoc-keys/src/main/java/com/zkdoc/keys/DevelopmentSigningKeyProvider.java",
+    "line": 42,
+    "cwe": "CWE-320",
+    "owasp": "A02:2021-Cryptographic Failures",
+    "cvss40": {
+      "score": 4.1,
+      "vector": "CVSS:4.0/AV:L/AC:H/AT:N/PR:L/UI:N/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N"
+    },
+    "description": "For local development and evaluation convenience, asymmetric signing keys are generated in-process on startup if unconfigured. The key registry stores public key metadata and points to environment file paths for private keys, lacking hardware-backed protection (HSM/KMS).",
+    "impact": "Keys do not persist across process restarts in default dev mode unless configured, and private key files on disk are vulnerable to host-level exfiltration.",
+    "recommendation": "Integrate an enterprise Key Management Service (AWS KMS, Azure Key Vault, or HashiCorp Vault) or PKCS#11 HSM provider for production signing operations."
+  },
+  {
+    "findingId": "FIND-005",
+    "title": "PostgreSQL Flyway Integration Test Skipped on Hosts Without Active Docker Daemon",
+    "severity": "LOW",
+    "confidence": "CONFIRMED",
+    "status": "OPEN",
+    "component": "zkdoc-api",
+    "file": "zkdoc-api/src/test/java/com/zkdoc/api/PostgresFlywayMigrationIntegrationTest.java",
+    "line": 20,
+    "cwe": "CWE-1068",
+    "owasp": "A05:2021-Security Misconfiguration",
+    "cvss40": {
+      "score": 2.5,
+      "vector": "CVSS:4.0/AV:L/AC:H/AT:P/PR:L/UI:N/VC:N/VI:L/VA:N/SC:N/SI:N/SA:N"
+    },
+    "description": "PostgresFlywayMigrationIntegrationTest uses Testcontainers with @EnabledIf(\"isDockerAvailable\"). When executed locally on hosts where Docker Desktop is inactive, the test is skipped (1 skipped test). PostgreSQL migrations (V1-V8) are only verified in CI.",
+    "impact": "Developers without a running local Docker engine cannot verify PostgreSQL migration consistency prior to pushing commits.",
+    "recommendation": "Provide an optional embedded/in-memory PostgreSQL profile or a remote test database flag to allow running PostgreSQL migration tests when Docker Desktop is offline."
+  },
+  {
+    "findingId": "FIND-006",
+    "title": "In-Memory Rate Limiting Storage Does Not Enforce Clustered Multi-Node Limits",
+    "severity": "LOW",
+    "confidence": "CONFIRMED",
+    "status": "OPEN",
+    "component": "zkdoc-api",
+    "file": "zkdoc-api/src/main/java/com/zkdoc/api/ratelimit/BucketRateLimitService.java",
+    "line": 25,
+    "cwe": "CWE-770",
+    "owasp": "A04:2021-Insecure Design",
+    "cvss40": {
+      "score": 2.3,
+      "vector": "CVSS:4.0/AV:N/AC:H/AT:P/PR:N/UI:N/VC:N/VI:N/VA:L/SC:N/SI:N/SA:N"
+    },
+    "description": "BucketRateLimitService uses an in-memory ConcurrentHashMap backed by Bucket4j token buckets. In a horizontally scaled cluster, each node enforces limits independently.",
+    "impact": "Effective public verification rate limit multiplies by the number of active container replicas, increasing DoS vulnerability on public endpoints.",
+    "recommendation": "Implement a distributed Redis/Lettuce backing store for Bucket4j in production profiles."
+  },
+  {
+    "findingId": "FIND-007",
+    "title": "Zero-Knowledge Predicate Scope Strictly Limited to Range Inequalities",
+    "severity": "INFORMATIONAL",
+    "confidence": "CONFIRMED",
+    "status": "DOCUMENTED",
+    "component": "zkdoc-zkp",
+    "file": "zkdoc-zkp/src/main/java/com/zkdoc/zkp/engine/WeavechainBulletproofPredicateEngine.java",
+    "line": 42,
+    "cwe": "CWE-1059",
+    "owasp": "A04:2021-Insecure Design",
+    "cvss40": null,
+    "description": "The platform's zero-knowledge capability is specifically Bulletproof range proofs for attribute >= threshold predicates over Ristretto255 Pedersen commitments. It does not provide general arithmetic circuits or ZK-SNARK protocols.",
+    "impact": "Potential misalignment of expectations if stakeholders assume arbitrary zero-knowledge computation or universal selective disclosure.",
+    "recommendation": "Maintain explicit documentation regarding implemented range predicate scope across API references and academic viva presentation materials."
+  },
+  {
+    "findingId": "FIND-008",
+    "title": "Relaxed Content Security Policy Allows Inline Styles ('unsafe-inline')",
+    "severity": "LOW",
+    "confidence": "CONFIRMED",
+    "status": "OPEN",
+    "component": "zkdoc-api",
+    "file": "zkdoc-api/src/main/java/com/zkdoc/api/security/SecurityConfiguration.java",
+    "line": 30,
+    "cwe": "CWE-1021",
+    "owasp": "A05:2021-Security Misconfiguration",
+    "cvss40": {
+      "score": 2.2,
+      "vector": "CVSS:4.0/AV:N/AC:H/AT:N/PR:N/UI:R/VC:N/VI:L/VA:N/SC:N/SI:N/SA:N"
+    },
+    "description": "The Content-Security-Policy header permits style-src 'self' 'unsafe-inline' to accommodate runtime CSS utilities.",
+    "impact": "Allows attackers who manage to inject style elements to alter layout or conduct CSS-based exfiltration/defacement.",
+    "recommendation": "Transition to nonce-based or hash-based CSP directives for style elements and precompile all styling."
+  }
+]
