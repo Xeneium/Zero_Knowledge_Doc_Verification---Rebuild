@@ -26,12 +26,24 @@ public class JdbcSecurityAuditService implements SecurityAuditService {
 
     private final JdbcTemplate jdbcTemplate;
     private final Clock clock;
+    private final boolean isPostgres;
     private final Object chainLock = new Object();
     private LatestChainState cachedLatestState = null;
 
     public JdbcSecurityAuditService(JdbcTemplate jdbcTemplate, Clock clock) {
         this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate must not be null");
         this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        boolean postgres = false;
+        try {
+            if (jdbcTemplate.getDataSource() != null) {
+                try (var conn = jdbcTemplate.getDataSource().getConnection()) {
+                    String dbName = conn.getMetaData().getDatabaseProductName();
+                    postgres = dbName != null && dbName.toLowerCase().contains("postgres");
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        this.isPostgres = postgres;
     }
 
     void invalidateCache() {
@@ -64,7 +76,9 @@ public class JdbcSecurityAuditService implements SecurityAuditService {
         AuditDataMinimizer.assertNoSecretMaterial(metadataJson, "metadataJson");
 
         UUID eventId = UUID.randomUUID();
-        Instant timestamp = clock.instant();
+        Instant timestamp = isPostgres
+                ? clock.instant().truncatedTo(java.time.temporal.ChronoUnit.MICROS)
+                : clock.instant();
         AuditEventType eventType = request.eventType();
         AuditEventCategory category = eventType.getCategory();
 
@@ -106,11 +120,11 @@ public class JdbcSecurityAuditService implements SecurityAuditService {
                             metadata_json, previous_event_hash, event_hash
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
-                        eventId.toString(),
+                        isPostgres ? eventId : eventId.toString(),
                         sequenceNumber,
                         eventType.name(),
                         category.name(),
-                        timestamp.toString(),
+                        isPostgres ? java.sql.Timestamp.from(timestamp) : timestamp.toString(),
                         actor,
                         request.actorType().name(),
                         request.targetType() != null ? request.targetType().name() : null,
@@ -183,11 +197,11 @@ public class JdbcSecurityAuditService implements SecurityAuditService {
         }
         if (filter.from() != null) {
             sql.append("AND timestamp >= ? ");
-            params.add(filter.from().toString());
+            params.add(isPostgres ? java.sql.Timestamp.from(filter.from()) : filter.from().toString());
         }
         if (filter.to() != null) {
             sql.append("AND timestamp <= ? ");
-            params.add(filter.to().toString());
+            params.add(isPostgres ? java.sql.Timestamp.from(filter.to()) : filter.to().toString());
         }
 
         sql.append("ORDER BY sequence_number DESC LIMIT ? OFFSET ?");
@@ -228,11 +242,11 @@ public class JdbcSecurityAuditService implements SecurityAuditService {
         }
         if (filter.from() != null) {
             sql.append("AND timestamp >= ? ");
-            params.add(filter.from().toString());
+            params.add(isPostgres ? java.sql.Timestamp.from(filter.from()) : filter.from().toString());
         }
         if (filter.to() != null) {
             sql.append("AND timestamp <= ? ");
-            params.add(filter.to().toString());
+            params.add(isPostgres ? java.sql.Timestamp.from(filter.to()) : filter.to().toString());
         }
 
         Long count = jdbcTemplate.queryForObject(sql.toString(), Long.class, params.toArray());
@@ -321,12 +335,25 @@ public class JdbcSecurityAuditService implements SecurityAuditService {
                 ? TargetType.valueOf(targetTypeStr)
                 : null;
 
+        Instant ts;
+        if (isPostgres) {
+            java.sql.Timestamp t = rs.getTimestamp("timestamp");
+            ts = t != null ? t.toInstant() : parseInstant(rs, "timestamp");
+        } else {
+            String str = rs.getString("timestamp");
+            try {
+                ts = str != null ? Instant.parse(str) : null;
+            } catch (Exception e) {
+                ts = parseInstant(rs, "timestamp");
+            }
+        }
+
         return new SecurityAuditEvent(
                 UUID.fromString(rs.getString("id")),
                 rs.getLong("sequence_number"),
                 AuditEventType.valueOf(rs.getString("event_type")),
                 AuditEventCategory.valueOf(rs.getString("event_category")),
-                Instant.parse(rs.getString("timestamp")),
+                ts,
                 rs.getString("actor_subject"),
                 ActorType.valueOf(rs.getString("actor_type")),
                 targetType,
@@ -340,6 +367,73 @@ public class JdbcSecurityAuditService implements SecurityAuditService {
                 rs.getString("previous_event_hash"),
                 rs.getString("event_hash")
         );
+    }
+
+    private static java.sql.Timestamp toTimestamp(Instant instant) {
+        return instant != null ? java.sql.Timestamp.from(instant) : null;
+    }
+
+    private static Instant parseInstant(ResultSet rs, String column) {
+        if (rs == null || column == null) {
+            return null;
+        }
+        try {
+            Object obj = rs.getObject(column);
+            if (obj instanceof java.sql.Timestamp ts) {
+                return ts.toInstant();
+            }
+            if (obj instanceof java.time.OffsetDateTime odt) {
+                return odt.toInstant();
+            }
+            if (obj instanceof Instant inst) {
+                return inst;
+            }
+            if (obj instanceof Number num) {
+                return Instant.ofEpochMilli(num.longValue());
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            java.sql.Timestamp ts = rs.getTimestamp(column);
+            if (ts != null) {
+                return ts.toInstant();
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            String str = rs.getString(column);
+            if (str != null && !str.isBlank()) {
+                String trimmed = str.trim();
+                if (trimmed.chars().allMatch(Character::isDigit)) {
+                    try {
+                        return Instant.ofEpochMilli(Long.parseLong(trimmed));
+                    } catch (Exception ignored) {
+                    }
+                }
+                String normalized = trimmed.replace(" ", "T");
+                try {
+                    return Instant.parse(normalized);
+                } catch (Exception ignored) {
+                }
+                try {
+                    return java.time.OffsetDateTime.parse(normalized).toInstant();
+                } catch (Exception ignored) {
+                }
+                try {
+                    return java.time.LocalDateTime.parse(normalized).toInstant(java.time.ZoneOffset.UTC);
+                } catch (Exception ignored) {
+                }
+                if (!normalized.endsWith("Z") && !normalized.contains("+")
+                        && !normalized.substring(Math.min(10, normalized.length())).contains("-")) {
+                    try {
+                        return Instant.parse(normalized + "Z");
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 
     private record LatestChainState(long sequenceNumber, String eventHash) {}

@@ -8,6 +8,7 @@ export const ENDPOINTS = {
     `/api/documents/${encodeURIComponent(id)}/verify`,
   DOCUMENT_VERIFY_UPLOAD: (id: string) =>
     `/api/documents/${encodeURIComponent(id)}/verify-upload`,
+  DOCUMENT_DIRECT_VERIFY_UPLOAD: '/api/documents/verify-upload',
   DOCUMENT_QR: (id: string) => `/api/documents/${encodeURIComponent(id)}/qr`,
 
   // Credential Operations (CredentialController)
@@ -38,6 +39,7 @@ export const ENDPOINTS = {
     `/api/public/verify/${encodeURIComponent(token)}`,
   PUBLIC_VERIFY_CAPABILITY: (token: string) =>
     `/api/public/verify/capability/${encodeURIComponent(token)}`,
+  PUBLIC_VERIFY_UPLOAD: '/api/public/verify/upload',
 
   // Zero-Knowledge Predicates (CredentialPredicateController)
   VERIFY_PREDICATE: '/api/v2/zkp/credential-predicates/verify',

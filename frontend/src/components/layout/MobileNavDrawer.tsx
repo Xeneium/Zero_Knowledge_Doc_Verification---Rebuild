@@ -30,7 +30,7 @@ export function MobileNavDrawer({
     const timer = setTimeout(() => {
       if (drawerRef.current) {
         const focusable = drawerRef.current.querySelectorAll<HTMLElement>(
-          'button, [href], input',
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
         );
         if (focusable.length > 0) {
           focusable[0].focus();
@@ -59,7 +59,7 @@ export function MobileNavDrawer({
 
       if (e.key === 'Tab' && drawerRef.current) {
         const focusable = drawerRef.current.querySelectorAll<HTMLElement>(
-          'button, [href], input',
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
         );
         if (focusable.length === 0) return;
 
@@ -94,10 +94,11 @@ export function MobileNavDrawer({
         : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800',
     );
 
-  const canAccessHolder = authStore.hasAnyRole(['HOLDER', 'ADMIN']);
-  const canAccessIssuer = authStore.hasAnyRole(['ISSUER', 'ADMIN']);
-  const canAccessAudit = authStore.hasAnyRole(['ADMIN', 'ISSUER']);
-  const canAccessAdmin = authStore.hasAnyRole(['ADMIN']);
+  const userRoles = auth.isAuthenticated && auth.user ? auth.user.roles : [];
+  const canAccessHolder = userRoles.includes('HOLDER') || userRoles.includes('ADMIN');
+  const canAccessIssuer = userRoles.includes('ISSUER') || userRoles.includes('ADMIN');
+  const canAccessAudit = userRoles.includes('ADMIN') || userRoles.includes('ISSUER');
+  const canAccessAdmin = userRoles.includes('ADMIN');
   const hasAnyProtectedRoutes =
     canAccessHolder || canAccessIssuer || canAccessAudit || canAccessAdmin;
 

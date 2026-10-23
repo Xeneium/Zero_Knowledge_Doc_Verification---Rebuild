@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Navigate, Outlet } from 'react-router';
-import { authStore, type AuthState } from '../../state/authStore';
+import { authStore, type AuthState, normalizeRole } from '../../state/authStore';
 import { Skeleton } from '../feedback/Skeleton';
 
 export interface RequireRoleProps {
@@ -41,7 +41,11 @@ export const RequireRole: React.FC<RequireRoleProps> = ({
     return <Navigate to="/login" replace />;
   }
 
-  const isAuthorized = authStore.hasAnyRole(allowedRoles);
+  const userRoles = auth.user?.roles ?? [];
+  const normalizedTargets = allowedRoles.map(normalizeRole);
+  const isAuthorized =
+    userRoles.includes('ADMIN') ||
+    userRoles.some((r) => normalizedTargets.includes(r));
   if (!isAuthorized) {
     return <Navigate to="/forbidden" replace />;
   }

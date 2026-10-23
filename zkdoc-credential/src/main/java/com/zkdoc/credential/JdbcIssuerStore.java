@@ -29,8 +29,8 @@ public class JdbcIssuerStore implements IssuerStore {
                 issuer.name(),
                 issuer.status().name(),
                 issuer.signingKeyId().value(),
-                issuer.createdAt().toString(),
-                issuer.updatedAt().toString());
+                toTimestamp(issuer.createdAt()),
+                toTimestamp(issuer.updatedAt()));
     }
 
     @Override
@@ -52,7 +52,7 @@ public class JdbcIssuerStore implements IssuerStore {
                 WHERE issuer_id = ?
                 """,
                 status.name(),
-                Instant.now().toString(),
+                toTimestamp(Instant.now()),
                 id.value());
     }
 
@@ -62,7 +62,11 @@ public class JdbcIssuerStore implements IssuerStore {
                 rs.getString("name"),
                 IssuerStatus.valueOf(rs.getString("status")),
                 KeyId.of(rs.getString("signing_key_id")),
-                Instant.parse(rs.getString("created_at")),
-                Instant.parse(rs.getString("updated_at")));
+                JdbcTypeUtils.parseInstant(rs, "created_at"),
+                JdbcTypeUtils.parseInstant(rs, "updated_at"));
+    }
+
+    private static java.sql.Timestamp toTimestamp(Instant instant) {
+        return JdbcTypeUtils.toTimestamp(instant);
     }
 }

@@ -1,12 +1,15 @@
 package com.zkdoc.api.document;
 
 import com.zkdoc.api.audit.VerificationAuditService;
-import com.zkdoc.document.DocumentRecord;
 import com.zkdoc.document.DocumentNotFoundException;
+import com.zkdoc.document.DocumentRecord;
 import com.zkdoc.document.DocumentUploadService;
+import com.zkdoc.document.DocumentVerificationOutcome;
 import com.zkdoc.document.VerificationResult;
 import java.io.IOException;
+import java.time.Duration;
 import java.util.HexFormat;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -46,6 +49,11 @@ public class DocumentController {
         this.publicVerificationBaseUrl = publicVerificationBaseUrl.replaceAll("/+$", "");
     }
 
+    /**
+     * Upload and register a document artifact.
+     * Computes authoritative SHA-256 digest, anchors with RSA-PSS signature,
+     * provisions public verification capability token and verification link.
+     */
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<UploadResponse> upload(
             @RequestParam("file") MultipartFile file,
@@ -64,16 +72,72 @@ public class DocumentController {
                     file.getBytes(), file.getOriginalFilename(), file.getContentType(), ownerId);
             verificationAuditService.record(authentication, "DOCUMENT_UPLOADED", null, document.id(), true);
             if (zkdocMetrics != null) {
-                zkdocMetrics.recordDocumentUpload(true, java.time.Duration.ofNanos(System.nanoTime() - start));
+                zkdocMetrics.recordDocumentUpload(true, Duration.ofNanos(System.nanoTime() - start));
             }
+            String verificationUrl = publicVerificationBaseUrl + "/verify?token=" + document.publicToken();
             return ResponseEntity.status(HttpStatus.CREATED)
-                    .body(new UploadResponse(document.id(), HexFormat.of().formatHex(document.digest())));
+                    .body(new UploadResponse(
+                            document.id(),
+                            HexFormat.of().formatHex(document.digest()),
+                            document.publicToken(),
+                            verificationUrl));
         } catch (Exception e) {
             if (zkdocMetrics != null) {
-                zkdocMetrics.recordDocumentUpload(false, java.time.Duration.ofNanos(System.nanoTime() - start));
+                zkdocMetrics.recordDocumentUpload(false, Duration.ofNanos(System.nanoTime() - start));
             }
             throw e;
         }
+    }
+
+    /**
+     * List registered documents for the authenticated caller (or all documents if ADMIN).
+     * Returns safe metadata, cryptographic digests, public verification tokens, and verification links.
+     */
+    @GetMapping
+    public List<DocumentSummaryResponse> listDocuments(Authentication authentication) {
+        String ownerId = (authentication != null && authentication.getName() != null) ? authentication.getName() : "system";
+        boolean isAdmin = authentication != null && authentication.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+        List<DocumentRecord> records = documentUploadService.listDocumentsForOwner(ownerId, isAdmin);
+        return records.stream().map(doc -> new DocumentSummaryResponse(
+                doc.id(),
+                HexFormat.of().formatHex(doc.digest()),
+                doc.publicToken(),
+                publicVerificationBaseUrl + "/api/public/verify/" + doc.publicToken(),
+                publicVerificationBaseUrl + "/verify?token=" + doc.publicToken(),
+                doc.active(),
+                doc.ownerId()
+        )).toList();
+    }
+
+    /**
+     * Direct file upload verification for authenticated callers.
+     * Computes the candidate document's SHA-256 digest and verifies it against the authoritative store.
+     * If documentId is provided, checks against that specific record; otherwise, looks up the document by digest.
+     */
+    @PostMapping(value = "/verify-upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<DocumentVerificationOutcome> verifyUploadedDocument(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "documentId", required = false) UUID documentId,
+            Authentication authentication) throws IOException {
+        if (file == null || file.isEmpty()) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Verification copy file must not be empty");
+        }
+        if (documentId != null && authentication != null) {
+            boolean isVerifierOrAdmin = authentication.getAuthorities().stream()
+                    .anyMatch(a -> "ROLE_VERIFIER".equals(a.getAuthority()) || "ROLE_ADMIN".equals(a.getAuthority()));
+            if (!isVerifierOrAdmin) {
+                objectAuthorizationService.checkDocumentAccess(authentication, documentId);
+            }
+        }
+        long start = System.nanoTime();
+        DocumentVerificationOutcome outcome = documentUploadService.verifyUploadedDocument(file.getBytes(), documentId);
+        verificationAuditService.record(authentication, "DOCUMENT_UPLOAD_DIRECT_VERIFY", null, outcome.documentId(), outcome.verified());
+        if (zkdocMetrics != null) {
+            zkdocMetrics.recordPublicVerification("AUTHENTICATED_UPLOAD", outcome.status().name(), Duration.ofNanos(System.nanoTime() - start));
+        }
+        return ResponseEntity.ok(outcome);
     }
 
     @GetMapping("/{id}/verify")
@@ -113,6 +177,23 @@ public class DocumentController {
         return qrCodeService.pngFor(publicVerificationBaseUrl + "/api/public/verify/" + token);
     }
 
-    public record UploadResponse(UUID id, String digest) {
+    public record UploadResponse(
+            UUID id,
+            String digest,
+            String publicToken,
+            String verificationUrl) {
+        public UploadResponse(UUID id, String digest) {
+            this(id, digest, null, null);
+        }
+    }
+
+    public record DocumentSummaryResponse(
+            UUID id,
+            String digest,
+            String publicToken,
+            String publicVerifyApiUrl,
+            String verificationUrl,
+            boolean active,
+            String ownerId) {
     }
 }

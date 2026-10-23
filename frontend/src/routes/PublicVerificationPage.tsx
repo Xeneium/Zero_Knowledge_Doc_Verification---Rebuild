@@ -149,16 +149,24 @@ export const PublicVerificationPage: React.FC = () => {
     verifierStore.clearResult();
 
     try {
-      const result = await verifierApi.verifyDocumentUploadedCopy(
-        documentId,
+      const outcome = await verifierApi.verifyUploadedDocumentDirect(
         file,
+        documentId.trim() || undefined,
       );
       verifierStore.setResult({
         kind: 'DOCUMENT_UPLOAD',
-        documentId,
+        documentId: outcome.documentId || (documentId.trim() || undefined),
+        digest: outcome.digest,
         fileName: file.name,
         fileSize: file.size,
-        response: result,
+        outcome: outcome,
+        response: {
+          verified: outcome.status === 'VERIFIED',
+          documentId: outcome.documentId,
+          status: outcome.status,
+          digest: outcome.digest,
+          message: outcome.message,
+        },
         timestamp: new Date().toISOString(),
       });
     } catch (err) {
@@ -166,15 +174,24 @@ export const PublicVerificationPage: React.FC = () => {
       if (apiErr.status === 404) {
         verifierStore.setError({
           type: 'NOT_FOUND',
-          message: `Document UUID ${documentId} not found in the repository.`,
-          targetReference: documentId,
+          message: documentId.trim()
+            ? `Document UUID ${documentId} was not found in the platform registry.`
+            : 'No matching document record was found for this file. It may be unregistered or altered.',
+          targetReference: documentId.trim() || file.name,
         });
       } else if (apiErr.status === 403) {
         verifierStore.setError({
           type: 'FORBIDDEN',
           message:
-            'Access denied. Document file upload verification requires an authorized verifier session.',
-          targetReference: documentId,
+            'Access denied. Document verification requires authorization or an active session.',
+          targetReference: documentId.trim() || file.name,
+        });
+      } else if (apiErr.status === 429) {
+        verifierStore.setError({
+          type: 'RATE_LIMITED',
+          message:
+            'Public verification rate limit reached. Please wait a moment before trying again.',
+          targetReference: file.name,
         });
       } else {
         verifierStore.setError({
@@ -182,7 +199,7 @@ export const PublicVerificationPage: React.FC = () => {
           message:
             apiErr.message ||
             'Verification service failed while verifying uploaded document.',
-          targetReference: documentId,
+          targetReference: documentId.trim() || file.name,
         });
       }
     }

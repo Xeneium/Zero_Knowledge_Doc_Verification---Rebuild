@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Link } from 'react-router';
 import {
   UploadCloud,
   FileCheck,
@@ -6,6 +7,7 @@ import {
   QrCode,
   ShieldCheck,
   X,
+  ExternalLink,
 } from 'lucide-react';
 import {
   Card,
@@ -47,6 +49,11 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
   const [qrBlobUrl, setQrBlobUrl] = useState<string | null>(null);
   const [isLoadingQr, setIsLoadingQr] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [uploadedFileDetails, setUploadedFileDetails] = useState<{
+    name: string;
+    size: number;
+    type: string;
+  } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -112,6 +119,11 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
     setVerifyStatus(null);
 
     try {
+      setUploadedFileDetails({
+        name: selectedFile.name,
+        size: selectedFile.size,
+        type: selectedFile.type || 'text/plain',
+      });
       const result = await issuerApi.uploadDocument(selectedFile);
       setUploadResult(result);
       issuerStore.addActivity({
@@ -121,6 +133,16 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
         digest: result.digest,
         status: 'STORED & SIGNED',
       });
+
+      // Automatically fetch the QR code image
+      try {
+        const blob = await issuerApi.getDocumentQrBlob(result.id);
+        const url = URL.createObjectURL(blob);
+        setQrBlobUrl(url);
+      } catch {
+        // Non-fatal if QR fails to auto-load
+      }
+
       if (onSuccess) {
         onSuccess(result);
       }
@@ -172,6 +194,7 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
     setValidationError(null);
     setUploadError(null);
     setUploadResult(null);
+    setUploadedFileDetails(null);
     setVerifyStatus(null);
     if (qrBlobUrl) {
       URL.revokeObjectURL(qrBlobUrl);
@@ -289,18 +312,50 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
                     </p>
                   </div>
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleReset();
-                  }}
-                  aria-label="Remove selected file"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      fileInputRef.current?.click();
+                    }}
+                    aria-label="Replace selected file"
+                  >
+                    Replace
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleReset();
+                    }}
+                    aria-label="Remove selected file"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Upload Progress Indicator */}
+            {isUploading && (
+              <div
+                role="progressbar"
+                aria-label="Document upload progress"
+                aria-busy="true"
+                className="w-full space-y-1.5"
+              >
+                <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400">
+                  <span>Uploading and computing cryptographic SHA-256 digest...</span>
+                  <span className="font-mono">Processing</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                  <div className="h-full w-2/3 animate-pulse rounded-full bg-indigo-600 dark:bg-indigo-500" />
+                </div>
               </div>
             )}
 
@@ -333,7 +388,20 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
             </Alert>
 
             <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-900/60">
-              <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              {uploadedFileDetails && (
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="text-xs font-semibold tracking-wider text-slate-500 uppercase dark:text-slate-400">
+                    Registered Document
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-xs text-slate-900 dark:text-slate-100">
+                      {uploadedFileDetails.name} ({formatFileSize(uploadedFileDetails.size)})
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex flex-col gap-1 border-t border-slate-200/60 pt-3 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800">
                 <span className="text-xs font-semibold tracking-wider text-slate-500 uppercase dark:text-slate-400">
                   Document ID (UUID)
                 </span>
@@ -356,6 +424,45 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
                   <FormattedHash value={uploadResult.digest} />
                 </div>
               </div>
+
+              {uploadResult.publicToken && (
+                <div className="flex flex-col gap-1 border-t border-slate-200/60 pt-3 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800">
+                  <span className="text-xs font-semibold tracking-wider text-slate-500 uppercase dark:text-slate-400">
+                    Public Verification Token
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs text-slate-700 dark:text-slate-300">
+                      {uploadResult.publicToken}
+                    </span>
+                    <CopyToClipboard
+                      value={uploadResult.publicToken}
+                      label="Copy Public Token"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {uploadResult.verificationUrl && (
+                <div className="flex flex-col gap-1 border-t border-slate-200/60 pt-3 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800">
+                  <span className="text-xs font-semibold tracking-wider text-slate-500 uppercase dark:text-slate-400">
+                    Direct Verification Link
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={uploadResult.verificationUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-xs text-indigo-600 hover:underline dark:text-indigo-400 truncate max-w-xs sm:max-w-md"
+                    >
+                      {uploadResult.verificationUrl}
+                    </a>
+                    <CopyToClipboard
+                      value={uploadResult.verificationUrl}
+                      label="Copy Verification Link"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Verification Status */}
@@ -373,6 +480,14 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
                   : 'Stored copy failed integrity check or signature verification.'}
               </Alert>
             )}
+
+            {/* Workflow Separation & Privacy Notice */}
+            <div className="rounded-md border border-indigo-100 bg-indigo-50/60 p-4 text-xs text-indigo-900 dark:border-indigo-950 dark:bg-indigo-950/40 dark:text-indigo-200">
+              <p className="font-semibold">Workflow Separation &amp; Privacy Notice:</p>
+              <p className="mt-1">
+                The original document did not require an embedded QR code. Document registration and QR-based verification are distinct workflows. The QR code above provides a privacy-preserving capability token for public verification without disclosing private document contents.
+              </p>
+            </div>
 
             {/* QR Code Presentation */}
             {qrBlobUrl && (
@@ -406,6 +521,15 @@ export const DocumentUploadCard: React.FC<DocumentUploadCardProps> = ({
               </Button>
 
               <div className="flex flex-wrap items-center gap-2">
+                {uploadResult.publicToken && (
+                  <Link to={`/verify?token=${uploadResult.publicToken}`}>
+                    <Button type="button" variant="outline" className="flex items-center gap-2">
+                      <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                      <span>Open in Public Verification</span>
+                    </Button>
+                  </Link>
+                )}
+
                 <Button
                   type="button"
                   variant="outline"

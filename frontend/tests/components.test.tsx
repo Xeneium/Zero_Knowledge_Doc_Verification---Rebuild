@@ -74,6 +74,20 @@ describe('Production UI Component Library', () => {
       const button = screen.getByRole('button', { name: /revoke key/i });
       expect(button.className).toContain('bg-red-600');
     });
+
+    it('renders left and right icons when provided', () => {
+      render(
+        <Button
+          leftIcon={<span data-testid="left-icon">left</span>}
+          rightIcon={<span data-testid="right-icon">right</span>}
+        >
+          Navigate
+        </Button>,
+      );
+      expect(screen.getByTestId('left-icon')).toBeInTheDocument();
+      expect(screen.getByTestId('right-icon')).toBeInTheDocument();
+      expect(screen.getByText('Navigate')).toBeInTheDocument();
+    });
   });
 
   describe('Badge', () => {

@@ -249,9 +249,26 @@ class AuthStore {
   private expirationTimer: ReturnType<typeof setTimeout> | null = null;
   private isTornDown = false;
   private sessionEpoch = 0;
+  private syncChannel: BroadcastChannel | null = null;
 
   constructor() {
     this.restoreSession();
+    this.initSyncChannel();
+  }
+
+  private initSyncChannel(): void {
+    try {
+      if (typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined') {
+        this.syncChannel = new BroadcastChannel('zkdoc_auth_sync');
+        this.syncChannel.onmessage = (event: MessageEvent<{ type?: string; reason?: string }>) => {
+          if (event.data?.type === 'LOGOUT' && this.state.isAuthenticated) {
+            this.clearSession(event.data.reason || 'Session terminated from another tab.', false);
+          }
+        };
+      }
+    } catch {
+      // BroadcastChannel unavailable
+    }
   }
 
   private restoreSession(): void {
@@ -390,7 +407,7 @@ class AuthStore {
   /**
    * Clears session in-memory, purges sensitive domain stores, and removes stored token from sessionStorage.
    */
-  public clearSession(reason?: string): void {
+  public clearSession(reason?: string, broadcast = true): void {
     this.clearExpirationTimer();
     this.isTornDown = true;
     this.sessionEpoch++;
@@ -409,6 +426,16 @@ class AuthStore {
       }
     } catch {
       // Ignore
+    }
+
+    if (broadcast) {
+      try {
+        if (this.syncChannel) {
+          this.syncChannel.postMessage({ type: 'LOGOUT', reason });
+        }
+      } catch {
+        // Broadcast non-fatal
+      }
     }
 
     notifyTeardownListeners();
@@ -437,6 +464,17 @@ class AuthStore {
       }
     } catch {
       // Ignore
+    }
+
+    try {
+      if (this.syncChannel) {
+        this.syncChannel.postMessage({
+          type: 'LOGOUT',
+          reason: 'Session expired',
+        });
+      }
+    } catch {
+      // Broadcast non-fatal
     }
 
     notifyTeardownListeners();

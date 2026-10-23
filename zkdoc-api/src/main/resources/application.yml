@@ -73,8 +73,8 @@ spring:
     activate:
       on-profile: postgres | prod | production
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/zkdoc}
-    username: ${SPRING_DATASOURCE_USERNAME:zkdoc_app}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/Zero_Knowledge}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
     password: ${SPRING_DATASOURCE_PASSWORD:}
     driver-class-name: org.postgresql.Driver
     hikari:
@@ -86,8 +86,10 @@ spring:
       max-lifetime: 1800000
   flyway:
     enabled: true
+    baseline-on-migrate: true
+    baseline-version: "0"
     locations: classpath:db/migration/postgresql
 
 zkdoc:
   demo:
-    seed-enabled: false
+    seed-enabled: ${ZKDOC_DEMO_SEED_ENABLED:false}

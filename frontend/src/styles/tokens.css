@@ -1,124 +1,199 @@
+/**
+ * Design Token Architecture for Zero-Knowledge Document Verification Platform.
+ * Follows W3C Design Tokens Community Group specification guidelines and WCAG 2.1 AA.
+ * Supports dual-mode enterprise foundation (defaulting to Slate/Indigo/Emerald).
+ */
+
 :root {
-  /* Surface & Canvas */
-  --color-bg-canvas: #f8fafc; /* slate-50 */
-  --color-bg-surface: #ffffff; /* white */
-  --color-bg-subtle: #f1f5f9; /* slate-100 */
-  --color-bg-muted: #e2e8f0; /* slate-200 */
-
-  /* Text & Foreground */
-  --color-text-primary: #0f172a; /* slate-900 (16.1:1 contrast on canvas) */
-  --color-text-secondary: #475569; /* slate-600 (6.8:1 contrast on canvas) */
-  --color-text-muted: #64748b; /* slate-500 (4.6:1 contrast on canvas) */
-  --color-text-inverse: #ffffff;
-
-  /* Brand Primary */
+  /* ========================================================================
+     1. Brand Foundations
+     ======================================================================== */
   --color-brand-primary: #4f46e5; /* indigo-600 */
-  --color-brand-hover: #4338ca; /* indigo-700 */
-  --color-brand-subtle: #e0e7ff; /* indigo-100 */
-  --color-brand-text: #3730a3; /* indigo-800 */
+  --color-brand-hover: #4338ca;   /* indigo-700 */
+  --color-brand-subtle: #e0e7ff;  /* indigo-100 */
+  --color-brand-text: #3730a3;    /* indigo-800 */
+  --color-brand-accent: #0284c7;  /* sky-600 */
 
-  /* Semantic State: Success */
-  --color-success-base: #16a34a; /* green-600 */
-  --color-success-bg: #f0fdf4; /* green-50 */
+  /* ========================================================================
+     2. Surface & Canvas (Light Foundation)
+     ======================================================================== */
+  --color-bg-canvas: #f8fafc;     /* slate-50 */
+  --color-bg-surface: #ffffff;    /* pure white */
+  --color-bg-subtle: #f1f5f9;     /* slate-100 */
+  --color-bg-muted: #e2e8f0;      /* slate-200 */
+  --color-bg-elevated: #ffffff;   /* white */
+
+  /* Semantic Aliases for Design System */
+  --surface-canvas: var(--color-bg-canvas);
+  --surface-card: var(--color-bg-surface);
+  --surface-card-hover: var(--color-bg-subtle);
+  --surface-elevated: var(--color-bg-elevated);
+
+  /* ========================================================================
+     3. Text & Typography (Light Foundation - WCAG AA Contrast >= 4.5:1)
+     ======================================================================== */
+  --color-text-primary: #0f172a;   /* slate-900 (16.1:1 on canvas) */
+  --color-text-secondary: #475569; /* slate-600 (6.8:1 on canvas) */
+  --color-text-muted: #64748b;     /* slate-500 (4.6:1 on canvas) */
+  --color-text-inverse: #ffffff;   /* white */
+
+  --text-primary: var(--color-text-primary);
+  --text-secondary: var(--color-text-secondary);
+  --text-muted: var(--color-text-muted);
+
+  /* ========================================================================
+     4. Verification Statuses & Semantic States (Light Foundation)
+     ======================================================================== */
+  /* Success: Verified & Authentic */
+  --color-success-base: #16a34a;   /* green-600 */
+  --color-success-bg: #f0fdf4;     /* green-50 */
   --color-success-border: #bbf7d0; /* green-200 */
-  --color-success-text: #166534; /* green-800 (5.9:1 contrast) */
+  --color-success-text: #166534;   /* green-800 (5.9:1 contrast) */
+  --status-verified: var(--color-success-base);
+  --status-verified-bg: var(--color-success-bg);
+  --status-verified-border: var(--color-success-border);
+  --status-verified-text: var(--color-success-text);
 
-  /* Semantic State: Warning */
-  --color-warning-base: #d97706; /* amber-600 */
-  --color-warning-bg: #fffbeb; /* amber-50 */
+  /* Warning: Suspended / Expired */
+  --color-warning-base: #d97706;   /* amber-600 */
+  --color-warning-bg: #fffbeb;     /* amber-50 */
   --color-warning-border: #fde68a; /* amber-200 */
-  --color-warning-text: #92400e; /* amber-800 (5.2:1 contrast) */
+  --color-warning-text: #92400e;   /* amber-800 (5.2:1 contrast) */
+  --status-warning: var(--color-warning-base);
+  --status-warning-bg: var(--color-warning-bg);
+  --status-warning-border: var(--color-warning-border);
+  --status-warning-text: var(--color-warning-text);
 
-  /* Semantic State: Danger / Revoked */
-  --color-danger-base: #dc2626; /* red-600 */
-  --color-danger-bg: #fef2f2; /* red-50 */
-  --color-danger-border: #fecaca; /* red-200 */
-  --color-danger-text: #991b1b; /* red-800 (6.5:1 contrast) */
+  /* Danger: Tampered / Revoked */
+  --color-danger-base: #dc2626;    /* red-600 */
+  --color-danger-bg: #fef2f2;      /* red-50 */
+  --color-danger-border: #fecaca;  /* red-200 */
+  --color-danger-text: #991b1b;    /* red-800 (6.5:1 contrast) */
+  --status-tampered: var(--color-danger-base);
+  --status-tampered-bg: var(--color-danger-bg);
+  --status-tampered-border: var(--color-danger-border);
+  --status-tampered-text: var(--color-danger-text);
 
-  /* Semantic State: Info */
-  --color-info-base: #2563eb; /* blue-600 */
-  --color-info-bg: #eff6ff; /* blue-50 */
-  --color-info-border: #bfdbfe; /* blue-200 */
-  --color-info-text: #1e40af; /* blue-800 */
+  /* Info / ZKP Predicate Active */
+  --color-info-base: #2563eb;      /* blue-600 */
+  --color-info-bg: #eff6ff;        /* blue-50 */
+  --color-info-border: #bfdbfe;    /* blue-200 */
+  --color-info-text: #1e40af;      /* blue-800 */
+  --status-info: var(--color-info-base);
+  --status-info-bg: var(--color-info-bg);
+  --status-info-border: var(--color-info-border);
+  --status-info-text: var(--color-info-text);
 
-  /* Borders & Focus Rings */
-  --color-border-subtle: #e2e8f0; /* slate-200 */
-  --color-border-strong: #cbd5e1; /* slate-300 */
-  --color-border-focus: #4f46e5; /* indigo-600 */
+  /* ========================================================================
+     5. Borders & Accessible Focus Rings
+     ======================================================================== */
+  --color-border-subtle: #e2e8f0;  /* slate-200 */
+  --color-border-strong: #cbd5e1;  /* slate-300 */
+  --color-border-focus: #4f46e5;   /* indigo-600 */
+  --border-subtle: var(--color-border-subtle);
+  --border-strong: var(--color-border-strong);
+  --border-focus: var(--color-border-focus);
+  --ring-focus-width: 2px;
+  --ring-focus-offset: 2px;
 
-  /* Elevation Shadows */
+  /* ========================================================================
+     6. Elevation & Shadows
+     ======================================================================== */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg:
-    0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 
-  /* Border Radii */
+  /* ========================================================================
+     7. Border Radii
+     ======================================================================== */
   --radius-sm: 0.375rem; /* 6px */
-  --radius-md: 0.5rem; /* 8px */
-  --radius-lg: 0.75rem; /* 12px */
+  --radius-md: 0.5rem;   /* 8px */
+  --radius-lg: 0.75rem;  /* 12px */
+  --radius-xl: 1rem;     /* 16px */
   --radius-full: 9999px;
 
-  /* Layout & Sizing */
+  /* ========================================================================
+     8. Layout & Sizing
+     ======================================================================== */
   --header-height: 4rem;
-  --container-max-w: 80rem;
+  --container-max-w: 80rem; /* max-w-7xl */
 
-  /* Transitions */
+  /* ========================================================================
+     9. Z-Index Scale
+     ======================================================================== */
+  --z-base: 0;
+  --z-card: 1;
+  --z-sticky: 100;
+  --z-drawer: 200;
+  --z-modal-backdrop: 300;
+  --z-modal: 310;
+  --z-toast: 400;
+  --z-tooltip: 500;
+
+  /* ========================================================================
+     10. Transitions & Motion
+     ======================================================================== */
   --duration-fast: 150ms;
   --duration-normal: 250ms;
+  --duration-slow: 350ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Dark Theme Support */
+/* ==========================================================================
+   Dark Theme Tokens (.dark selector & system preference support)
+   ========================================================================== */
 .dark {
-  /* Surface & Canvas */
-  --color-bg-canvas: #090d16; /* deep slate-950 */
-  --color-bg-surface: #111827; /* slate-900 */
-  --color-bg-subtle: #1e293b; /* slate-800 */
-  --color-bg-muted: #334155; /* slate-700 */
+  /* Surface & Canvas (Dark Slate Foundation) */
+  --color-bg-canvas: #090d16;     /* deep slate-950 */
+  --color-bg-surface: #111827;    /* slate-900 */
+  --color-bg-subtle: #1e293b;     /* slate-800 */
+  --color-bg-muted: #334155;      /* slate-700 */
+  --color-bg-elevated: #1e293b;   /* slate-800 */
 
-  /* Text & Foreground */
-  --color-text-primary: #f8fafc; /* slate-50 (15.8:1 contrast on surface) */
-  --color-text-secondary: #cbd5e1; /* slate-300 (8.9:1 contrast on surface) */
-  --color-text-muted: #94a3b8; /* slate-400 (5.1:1 contrast on surface) */
-  --color-text-inverse: #0f172a;
+  /* Text & Foreground (Dark Foundation - WCAG AA Contrast >= 4.5:1) */
+  --color-text-primary: #f8fafc;   /* slate-50 (15.8:1 on surface) */
+  --color-text-secondary: #cbd5e1; /* slate-300 (8.9:1 on surface) */
+  --color-text-muted: #94a3b8;     /* slate-400 (5.1:1 on surface) */
+  --color-text-inverse: #0f172a;   /* slate-900 */
 
   /* Brand Primary */
-  --color-brand-primary: #6366f1; /* indigo-500 */
-  --color-brand-hover: #4f46e5; /* indigo-600 */
-  --color-brand-subtle: #1e1b4b; /* indigo-950 */
-  --color-brand-text: #c7d2fe; /* indigo-200 */
+  --color-brand-primary: #6366f1;  /* indigo-500 */
+  --color-brand-hover: #4f46e5;    /* indigo-600 */
+  --color-brand-subtle: #1e1b4b;   /* indigo-950 */
+  --color-brand-text: #c7d2fe;     /* indigo-200 */
+  --color-brand-accent: #38bdf8;   /* sky-400 */
 
-  /* Semantic State: Success */
-  --color-success-base: #22c55e; /* green-500 */
-  --color-success-bg: #052e16; /* green-950 */
+  /* Success: Verified & Authentic */
+  --color-success-base: #22c55e;   /* green-500 */
+  --color-success-bg: #052e16;     /* green-950 */
   --color-success-border: #14532d; /* green-900 */
-  --color-success-text: #86efac; /* green-300 */
+  --color-success-text: #86efac;   /* green-300 */
 
-  /* Semantic State: Warning */
-  --color-warning-base: #f59e0b; /* amber-500 */
-  --color-warning-bg: #451a03; /* amber-950 */
+  /* Warning: Suspended / Expired */
+  --color-warning-base: #f59e0b;   /* amber-500 */
+  --color-warning-bg: #451a03;     /* amber-950 */
   --color-warning-border: #78350f; /* amber-900 */
-  --color-warning-text: #fde68a; /* amber-200 */
+  --color-warning-text: #fde68a;   /* amber-200 */
 
-  /* Semantic State: Danger / Revoked */
-  --color-danger-base: #ef4444; /* red-500 */
-  --color-danger-bg: #450a0a; /* red-950 */
-  --color-danger-border: #7f1d1d; /* red-900 */
-  --color-danger-text: #fca5a5; /* red-300 */
+  /* Danger: Tampered / Revoked */
+  --color-danger-base: #ef4444;    /* red-500 */
+  --color-danger-bg: #450a0a;      /* red-950 */
+  --color-danger-border: #7f1d1d;  /* red-900 */
+  --color-danger-text: #fca5a5;    /* red-300 */
 
-  /* Semantic State: Info */
-  --color-info-base: #3b82f6; /* blue-500 */
-  --color-info-bg: #082f49; /* cyan-950 */
-  --color-info-border: #1e3a8a; /* blue-900 */
-  --color-info-text: #93c5fd; /* blue-300 */
+  /* Info / ZKP Predicate Active */
+  --color-info-base: #3b82f6;      /* blue-500 */
+  --color-info-bg: #082f49;        /* cyan-950 */
+  --color-info-border: #1e3a8a;    /* blue-900 */
+  --color-info-text: #93c5fd;      /* blue-300 */
 
   /* Borders & Focus Rings */
-  --color-border-subtle: #1e293b; /* slate-800 */
-  --color-border-strong: #334155; /* slate-700 */
-  --color-border-focus: #818cf8; /* indigo-400 */
+  --color-border-subtle: #1e293b;  /* slate-800 */
+  --color-border-strong: #334155;  /* slate-700 */
+  --color-border-focus: #818cf8;   /* indigo-400 */
 
   /* Elevation Shadows */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.4);
-  --shadow-lg:
-    0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.5);
 }

@@ -3,6 +3,7 @@ import { ENDPOINTS } from './endpoints';
 import type {
   DocumentUploadResponse,
   DocumentVerificationResult,
+  DocumentSummaryResponse,
   IssueCredentialRequest,
   IssueCredentialResponse,
   CredentialLifecycleResponse,
@@ -66,6 +67,14 @@ export const issuerApi = {
    */
   async getDocumentQrBlob(documentId: string): Promise<Blob> {
     return apiBlobRequest(ENDPOINTS.DOCUMENT_QR(documentId));
+  },
+
+  /**
+   * Retrieves registered documents and verification links.
+   * Endpoint: GET /api/documents
+   */
+  async listDocuments(): Promise<DocumentSummaryResponse[]> {
+    return apiRequest<DocumentSummaryResponse[]>(ENDPOINTS.DOCUMENTS);
   },
 
   /**

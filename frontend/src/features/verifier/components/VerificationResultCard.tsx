@@ -128,11 +128,20 @@ export const VerificationResultCard: React.FC<VerificationResultCardProps> = ({
     else if (!result.response.documentActive)
       failureReason = 'Document inactive or expired';
   } else if (isDocUpload) {
-    isValid = result.response.verified;
-    statusText = isValid ? 'VALID' : 'MISMATCH';
-    if (!isValid)
+    if (result.outcome) {
+      isValid = result.outcome.status === 'VERIFIED';
+      statusText = result.outcome.status;
       failureReason =
-        'Uploaded file hash does not match the stored cryptographic digest';
+        result.outcome.message ||
+        (!isValid ? `Status: ${result.outcome.status}` : null);
+    } else {
+      isValid = Boolean(result.response?.verified);
+      statusText = result.response?.status || (isValid ? 'VERIFIED' : 'MISMATCH');
+      if (!isValid)
+        failureReason =
+          result.response?.message ||
+          'Uploaded file hash does not match the stored cryptographic digest';
+    }
   } else if (isCredSignature) {
     isValid = result.response.verified;
     statusText = isValid ? 'VALID' : 'INVALID';
@@ -231,6 +240,22 @@ export const VerificationResultCard: React.FC<VerificationResultCardProps> = ({
                 >
                   {result.response.verified ? 'VALID' : 'FAILED'}
                 </Badge>
+              ) : isDocUpload ? (
+                <Badge
+                  variant={
+                    result.outcome?.status === 'INVALID_SIGNATURE'
+                      ? 'danger'
+                      : isValid
+                        ? 'success'
+                        : 'neutral'
+                  }
+                >
+                  {result.outcome?.status === 'INVALID_SIGNATURE'
+                    ? 'INVALID'
+                    : isValid
+                      ? 'VALID'
+                      : 'EVALUATED'}
+                </Badge>
               ) : (
                 <Badge variant="neutral">EVALUATED</Badge>
               )}
@@ -267,6 +292,25 @@ export const VerificationResultCard: React.FC<VerificationResultCardProps> = ({
                   {result.response.status ||
                     (result.response.verified ? 'ACTIVE' : 'INACTIVE')}
                 </Badge>
+              ) : isDocUpload ? (
+                <Badge
+                  variant={
+                    result.outcome?.status === 'REVOKED' ||
+                    result.outcome?.status === 'EXPIRED'
+                      ? 'danger'
+                      : isValid
+                        ? 'success'
+                        : 'neutral'
+                  }
+                >
+                  {result.outcome?.status === 'REVOKED'
+                    ? 'REVOKED'
+                    : result.outcome?.status === 'EXPIRED'
+                      ? 'EXPIRED'
+                      : isValid
+                        ? 'ACTIVE'
+                        : 'UNKNOWN'}
+                </Badge>
               ) : (
                 <Badge variant="neutral">VERIFIED</Badge>
               )}
@@ -279,9 +323,21 @@ export const VerificationResultCard: React.FC<VerificationResultCardProps> = ({
               </span>
               {isDocUpload ? (
                 <Badge
-                  variant={result.response.verified ? 'success' : 'danger'}
+                  variant={
+                    result.outcome?.status === 'INTEGRITY_MISMATCH' ||
+                    result.outcome?.status === 'NOT_FOUND' ||
+                    (!isValid && !result.outcome)
+                      ? 'danger'
+                      : 'success'
+                  }
                 >
-                  {result.response.verified ? 'MATCHES' : 'MISMATCH'}
+                  {result.outcome?.status === 'INTEGRITY_MISMATCH'
+                    ? 'MISMATCH'
+                    : result.outcome?.status === 'NOT_FOUND'
+                      ? 'NOT_FOUND'
+                      : isValid
+                        ? 'MATCHES'
+                        : 'EVALUATED'}
                 </Badge>
               ) : isCredSignature ? (
                 <Badge
@@ -341,6 +397,26 @@ export const VerificationResultCard: React.FC<VerificationResultCardProps> = ({
               {new Date(result.timestamp).toUTCString()}
             </span>
           </div>
+
+          {isDocUpload && (result.documentId || result.outcome?.documentId) && (
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500">Matched Document UUID:</span>
+              <span className="font-mono text-slate-800">
+                {result.documentId || result.outcome?.documentId}
+              </span>
+            </div>
+          )}
+
+          {isDocUpload && (result.digest || result.outcome?.digest) && (
+            <div className="flex items-center justify-between">
+              <span className="text-slate-500">SHA-256 Fingerprint:</span>
+              <FormattedHash
+                value={(result.digest || result.outcome?.digest)!}
+                prefixLength={12}
+                suffixLength={10}
+              />
+            </div>
+          )}
 
           {isPredicate && (
             <div className="flex items-center justify-between">

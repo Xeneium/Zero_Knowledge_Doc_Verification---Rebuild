@@ -35,12 +35,45 @@ export interface KeyStatusResponse {
 export interface DocumentUploadResponse {
   id: string; // UUID
   digest: string; // SHA-256 Hex string
+  publicToken?: string;
+  verificationUrl?: string;
+}
+
+export type DocumentVerificationStatus =
+  | 'VERIFIED'
+  | 'INTEGRITY_MISMATCH'
+  | 'INVALID_SIGNATURE'
+  | 'REVOKED'
+  | 'EXPIRED'
+  | 'NOT_FOUND'
+  | 'UNABLE_TO_VERIFY';
+
+export interface DocumentVerificationOutcome {
+  status: DocumentVerificationStatus;
+  documentId?: string;
+  digest?: string;
+  ownerId?: string;
+  verifiedAt?: string;
+  message?: string;
+}
+
+export interface DocumentSummaryResponse {
+  id: string;
+  ownerId: string;
+  digest: string;
+  status: string;
+  publicToken?: string;
+  verificationUrl?: string;
+  registeredAt?: string;
 }
 
 export interface DocumentVerificationResult {
   id?: string; // UUID
   documentId?: string; // UUID alias matching Java VerificationResult
   verified: boolean;
+  status?: DocumentVerificationStatus;
+  digest?: string;
+  message?: string;
 }
 
 // ==========================================

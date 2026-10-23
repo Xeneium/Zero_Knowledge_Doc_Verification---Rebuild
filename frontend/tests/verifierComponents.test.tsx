@@ -95,7 +95,7 @@ describe('Verifier Components & Public Verification Page', () => {
   });
 
   describe('DocumentUploadVerifyCard', () => {
-    it('prompts user to connect session when unauthenticated', () => {
+    it('renders public minimal verification mode when unauthenticated', () => {
       render(
         <MemoryRouter>
           <DocumentUploadVerifyCard
@@ -105,12 +105,9 @@ describe('Verifier Components & Public Verification Page', () => {
         </MemoryRouter>,
       );
 
-      expect(screen.getByText(/Authentication Required/i)).toBeInTheDocument();
+      expect(screen.getByText(/Public Minimal Verification/i)).toBeInTheDocument();
       expect(
-        screen.getByText(/Mode B document-upload verification/i),
-      ).toBeInTheDocument();
-      expect(
-        screen.getByRole('link', { name: /Connect Session/i }),
+        screen.getByText(/Direct Document Verification/i),
       ).toBeInTheDocument();
     });
 
@@ -129,7 +126,7 @@ describe('Verifier Components & Public Verification Page', () => {
       );
 
       expect(
-        screen.getByText(/Mode B: Document Integrity & Upload Verification/i),
+        screen.getByText(/Authenticated Verifier Session/i),
       ).toBeInTheDocument();
 
       const uuidInput = screen.getByLabelText(/Target Document UUID/i);
@@ -137,7 +134,7 @@ describe('Verifier Components & Public Verification Page', () => {
         /Upload document file for verification/i,
       );
       const submitBtn = screen.getByRole('button', {
-        name: /Verify Document Copy/i,
+        name: /Verify Document/i,
       });
 
       // Valid UUID

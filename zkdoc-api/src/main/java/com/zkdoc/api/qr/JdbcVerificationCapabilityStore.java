@@ -27,17 +27,17 @@ public class JdbcVerificationCapabilityStore implements VerificationCapabilitySt
                     revoked_at, revocation_reason
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                capability.id().value().toString(),
+                capability.id().value(),
                 capability.capabilityToken(),
-                capability.credentialId() != null ? capability.credentialId().toString() : null,
-                capability.documentId() != null ? capability.documentId().toString() : null,
+                capability.credentialId() != null ? capability.credentialId() : null,
+                capability.documentId() != null ? capability.documentId() : null,
                 capability.mode().name(),
                 capability.protocolVersion(),
                 capability.status().name(),
                 capability.createdBy(),
-                capability.createdAt().toString(),
-                capability.expiresAt().toString(),
-                capability.revokedAt() != null ? capability.revokedAt().toString() : null,
+                toTimestamp(capability.createdAt()),
+                toTimestamp(capability.expiresAt()),
+                capability.revokedAt() != null ? toTimestamp(capability.revokedAt()) : null,
                 capability.revocationReason()
         );
     }
@@ -61,7 +61,7 @@ public class JdbcVerificationCapabilityStore implements VerificationCapabilitySt
                        revoked_at, revocation_reason
                 FROM verification_capabilities
                 WHERE id = ?
-                """, rs -> rs.next() ? Optional.of(mapRow(rs)) : Optional.empty(), id.value().toString());
+                """, rs -> rs.next() ? Optional.of(mapRow(rs)) : Optional.empty(), id.value());
     }
 
     @Override
@@ -72,9 +72,9 @@ public class JdbcVerificationCapabilityStore implements VerificationCapabilitySt
                 WHERE id = ?
                 """,
                 status.name(),
-                revokedAt != null ? revokedAt.toString() : null,
+                toTimestamp(revokedAt),
                 reason,
-                id.value().toString()
+                id.value()
         );
     }
 
@@ -92,10 +92,76 @@ public class JdbcVerificationCapabilityStore implements VerificationCapabilitySt
                 rs.getString("protocol_version"),
                 CapabilityStatus.valueOf(rs.getString("status")),
                 rs.getString("created_by"),
-                Instant.parse(rs.getString("created_at")),
-                Instant.parse(rs.getString("expires_at")),
-                revAtStr != null ? Instant.parse(revAtStr) : null,
+                parseInstant(rs, "created_at"),
+                parseInstant(rs, "expires_at"),
+                parseInstant(rs, "revoked_at"),
                 rs.getString("revocation_reason")
         );
+    }
+    private static java.sql.Timestamp toTimestamp(Instant instant) {
+        return instant != null ? java.sql.Timestamp.from(instant) : null;
+    }
+
+    private static Instant parseInstant(ResultSet rs, String column) {
+        if (rs == null || column == null) {
+            return null;
+        }
+        try {
+            Object obj = rs.getObject(column);
+            if (obj instanceof java.sql.Timestamp ts) {
+                return ts.toInstant();
+            }
+            if (obj instanceof java.time.OffsetDateTime odt) {
+                return odt.toInstant();
+            }
+            if (obj instanceof Instant inst) {
+                return inst;
+            }
+            if (obj instanceof Number num) {
+                return Instant.ofEpochMilli(num.longValue());
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            java.sql.Timestamp ts = rs.getTimestamp(column);
+            if (ts != null) {
+                return ts.toInstant();
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            String str = rs.getString(column);
+            if (str != null && !str.isBlank()) {
+                String trimmed = str.trim();
+                if (trimmed.chars().allMatch(Character::isDigit)) {
+                    try {
+                        return Instant.ofEpochMilli(Long.parseLong(trimmed));
+                    } catch (Exception ignored) {
+                    }
+                }
+                String normalized = trimmed.replace(" ", "T");
+                try {
+                    return Instant.parse(normalized);
+                } catch (Exception ignored) {
+                }
+                try {
+                    return java.time.OffsetDateTime.parse(normalized).toInstant();
+                } catch (Exception ignored) {
+                }
+                try {
+                    return java.time.LocalDateTime.parse(normalized).toInstant(java.time.ZoneOffset.UTC);
+                } catch (Exception ignored) {
+                }
+                if (!normalized.endsWith("Z") && !normalized.contains("+")
+                        && !normalized.substring(Math.min(10, normalized.length())).contains("-")) {
+                    try {
+                        return Instant.parse(normalized + "Z");
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 }

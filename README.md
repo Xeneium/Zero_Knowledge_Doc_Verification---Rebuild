@@ -6,7 +6,7 @@
 
 [![Java 21](https://img.shields.io/badge/Java-21-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)](https://openjdk.org/projects/jdk/21/)
 [![Spring Boot 3.4.3](https://img.shields.io/badge/Spring_Boot-3.4.3-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
-[![React](https://img.shields.io/badge/React-18-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
 [![SQLite](https://img.shields.io/badge/SQLite-3.47-003B57?style=for-the-badge&logo=sqlite&logoColor=white)](https://www.sqlite.org/)
 [![License](https://img.shields.io/badge/License-Private-red?style=for-the-badge)](.)
 
@@ -179,7 +179,7 @@ flowchart TD
 
 | Technology | Purpose |
 |:-----------|:--------|
-| React 18 | UI framework |
+| React 19 | UI framework (v19.3.0) |
 | TypeScript | Type-safe development |
 | Vite | Build tooling and dev server |
 | TailwindCSS | Utility-first styling |
@@ -241,8 +241,8 @@ Zero Knowledge Document Verification/
 │       │   └── audit/                 # Verification audit logging
 │       └── resources/
 │           └── db/migration/
-│               ├── sqlite/            # V1–V10 SQLite migrations
-│               └── postgresql/        # V1–V5 PostgreSQL migrations
+│               ├── sqlite/            # V1–V13 SQLite migrations
+│               └── postgresql/        # V1–V12 PostgreSQL migrations
 │
 ├── 🌐 frontend/                       # React / TypeScript SPA
 │   └── src/
@@ -326,7 +326,7 @@ Invoke-RestMethod http://localhost:8080/api/health
 
 ### Test Suite
 
-The project includes **73+ tests** across 7 reactor modules with **0 failures, 0 errors**:
+The project includes **534 tests** (238 backend tests across 7 reactor modules + 296 frontend tests across 25 Vitest suites) with **0 failures, 0 errors**:
 
 | Module | Test Focus |
 |:-------|:-----------|

@@ -97,7 +97,7 @@ public class SecurityConfiguration {
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/holder/**").hasAnyRole("HOLDER", "ADMIN")
                         .requestMatchers("/api/v2/zkp/credential-predicates/**").hasRole("VERIFIER")
-                        .requestMatchers("/api/documents/**", "/api/credentials/**")
+                        .requestMatchers("/api/documents", "/api/documents/**", "/api/credentials", "/api/credentials/**")
                         .hasAnyRole("ISSUER", "HOLDER", "VERIFIER", "ADMIN")
                         .requestMatchers("/actuator/**").hasRole("ADMIN")
                         .requestMatchers("/api/**").authenticated()

@@ -137,7 +137,7 @@ public class JdbcKeyRegistry implements KeyRegistry {
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
         jdbcTemplate.update(sql,
-                key.id().toString(),
+                key.id(),
                 key.keyId(),
                 key.purpose().name(),
                 key.status().name(),
@@ -149,10 +149,10 @@ public class JdbcKeyRegistry implements KeyRegistry {
                 key.publicKeyDer(),
                 key.publicKeyEncoding(),
                 key.fingerprint(),
-                toTimestampString(key.createdAt()),
-                toTimestampString(key.activatedAt()),
-                toTimestampString(key.retiredAt()),
-                toTimestampString(key.revokedAt()),
+                toTimestamp(key.createdAt()),
+                toTimestamp(key.activatedAt()),
+                toTimestamp(key.retiredAt()),
+                toTimestamp(key.revokedAt()),
                 key.revocationReason(),
                 key.replacementKeyId(),
                 key.version());
@@ -160,9 +160,9 @@ public class JdbcKeyRegistry implements KeyRegistry {
 
     @Override
     public void updateStatus(String keyId, KeyStatus status, String revocationReason, String replacementKeyId) {
-        String nowStr = Instant.now().toString();
-        String retiredStr = (status == KeyStatus.RETIRED) ? nowStr : null;
-        String revokedStr = (status == KeyStatus.REVOKED) ? nowStr : null;
+        Timestamp nowTs = Timestamp.from(Instant.now());
+        Timestamp retiredTs = (status == KeyStatus.RETIRED) ? nowTs : null;
+        Timestamp revokedTs = (status == KeyStatus.REVOKED) ? nowTs : null;
 
         String sql = """
                 UPDATE key_registry
@@ -174,7 +174,7 @@ public class JdbcKeyRegistry implements KeyRegistry {
                     version = version + 1
                 WHERE key_id = ?
                 """;
-        jdbcTemplate.update(sql, status.name(), retiredStr, revokedStr, revocationReason, replacementKeyId, keyId);
+        jdbcTemplate.update(sql, status.name(), retiredTs, revokedTs, revocationReason, replacementKeyId, keyId);
     }
 
     @Override
@@ -182,8 +182,8 @@ public class JdbcKeyRegistry implements KeyRegistry {
         updateStatus(oldKeyId, KeyStatus.RETIRED, "Key rotated to replacement key: " + newKeyId, newKeyId);
     }
 
-    private static String toTimestampString(Instant instant) {
-        return instant != null ? instant.toString() : null;
+    private static Timestamp toTimestamp(Instant instant) {
+        return instant != null ? Timestamp.from(instant) : null;
     }
 
     private static class KeyRowMapper implements RowMapper<RegisteredKey> {
@@ -239,14 +239,62 @@ public class JdbcKeyRegistry implements KeyRegistry {
         }
 
         private static Instant parseInstant(ResultSet rs, String column) {
+            if (rs == null || column == null) {
+                return null;
+            }
             try {
-                String str = rs.getString(column);
-                if (str != null && !str.isBlank()) {
-                    return Instant.parse(str.replace(" ", "T"));
+                Object obj = rs.getObject(column);
+                if (obj instanceof Timestamp ts) {
+                    return ts.toInstant();
                 }
+                if (obj instanceof java.time.OffsetDateTime odt) {
+                    return odt.toInstant();
+                }
+                if (obj instanceof Instant inst) {
+                    return inst;
+                }
+                if (obj instanceof Number num) {
+                    return Instant.ofEpochMilli(num.longValue());
+                }
+            } catch (Exception ignored) {
+            }
+            try {
                 Timestamp ts = rs.getTimestamp(column);
                 if (ts != null) {
                     return ts.toInstant();
+                }
+            } catch (Exception ignored) {
+            }
+            try {
+                String str = rs.getString(column);
+                if (str != null && !str.isBlank()) {
+                    String trimmed = str.trim();
+                    if (trimmed.chars().allMatch(Character::isDigit)) {
+                        try {
+                            return Instant.ofEpochMilli(Long.parseLong(trimmed));
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    String normalized = trimmed.replace(" ", "T");
+                    try {
+                        return Instant.parse(normalized);
+                    } catch (Exception ignored) {
+                    }
+                    try {
+                        return java.time.OffsetDateTime.parse(normalized).toInstant();
+                    } catch (Exception ignored) {
+                    }
+                    try {
+                        return java.time.LocalDateTime.parse(normalized).toInstant(java.time.ZoneOffset.UTC);
+                    } catch (Exception ignored) {
+                    }
+                    if (!normalized.endsWith("Z") && !normalized.contains("+")
+                            && !normalized.substring(Math.min(10, normalized.length())).contains("-")) {
+                        try {
+                            return Instant.parse(normalized + "Z");
+                        } catch (Exception ignored) {
+                        }
+                    }
                 }
             } catch (Exception ignored) {
             }

@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Routes, Route } from 'react-router';
 import { LoginPage } from '../src/routes/LoginPage';
+import { ForbiddenPage } from '../src/routes/ForbiddenPage';
 import { RequireAuth, RequireRole } from '../src/components/auth';
 import { authStore } from '../src/state/authStore';
 
@@ -221,6 +222,47 @@ describe('Authentication Components & Route Protection', () => {
         screen.getByRole('button', { name: /disconnect session/i }),
       ).toBeInTheDocument();
     });
+
+    it('displays warning alert when entering login page with expired session state', () => {
+      const expiredState = {
+        status: 'expired' as const,
+        token: null,
+        user: null,
+        isAuthenticated: false,
+        error: 'Session has expired. Please connect a valid JWT to continue.',
+      };
+      vi.spyOn(authStore, 'getState').mockReturnValue(expiredState);
+
+      render(
+        <MemoryRouter initialEntries={['/login']}>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByText('Session Expired')).toBeInTheDocument();
+      expect(
+        screen.getByText(/session has expired\. please connect a valid jwt/i),
+      ).toBeInTheDocument();
+    });
+
+    it('does not render unsupported registration or password reset links', () => {
+      render(
+        <MemoryRouter initialEntries={['/login']}>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      expect(
+        screen.queryByRole('link', { name: /register|sign up|create account/i }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('link', { name: /forgot password|reset password/i }),
+      ).not.toBeInTheDocument();
+    });
   });
 
   describe('Route Guards: RequireAuth & RequireRole', () => {
@@ -352,6 +394,56 @@ describe('Authentication Components & Route Protection', () => {
 
       expect(screen.queryByText(/admin console page/i)).not.toBeInTheDocument();
       expect(screen.getByText(/403 access denied page/i)).toBeInTheDocument();
+    });
+  });
+
+  describe('ForbiddenPage Component', () => {
+    it('renders 403 status, explanation, and connect action when unauthenticated', () => {
+      render(
+        <MemoryRouter initialEntries={['/forbidden']}>
+          <ForbiddenPage />
+        </MemoryRouter>,
+      );
+
+      expect(
+        screen.getByRole('heading', { name: /access restricted/i }),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/403 forbidden/i)).toBeInTheDocument();
+      expect(
+        screen.getByRole('link', { name: /connect different session/i }),
+      ).toHaveAttribute('href', '/login');
+      expect(
+        screen.getByRole('link', { name: /return to overview/i }),
+      ).toHaveAttribute('href', '/');
+    });
+
+    it('renders connected user identity, assigned roles, and disconnect action when authenticated', async () => {
+      const user = userEvent.setup();
+      const payload = btoa(
+        JSON.stringify({
+          sub: 'restricted-holder',
+          roles: ['HOLDER'],
+          exp: Math.floor(Date.now() / 1000) + 3600,
+        }),
+      );
+      authStore.setToken(`header.${payload}.sig`);
+
+      render(
+        <MemoryRouter initialEntries={['/forbidden']}>
+          <ForbiddenPage />
+        </MemoryRouter>,
+      );
+
+      expect(screen.getByText('restricted-holder')).toBeInTheDocument();
+      expect(screen.getByText('HOLDER')).toBeInTheDocument();
+
+      const disconnectBtn = screen.getByRole('button', {
+        name: /disconnect session/i,
+      });
+      expect(disconnectBtn).toBeInTheDocument();
+
+      await user.click(disconnectBtn);
+      expect(authStore.getState().isAuthenticated).toBe(false);
     });
   });
 });

@@ -134,6 +134,66 @@ public class DocumentUploadService {
     }
 
     /**
+     * Direct upload verification: computes SHA-256 digest of uploaded bytes and verifies
+     * against the authoritative store. If candidateId is provided, checks against that specific
+     * record (returning INTEGRITY_MISMATCH on hash divergence). Otherwise, resolves the registration
+     * record directly by computed SHA-256 digest.
+     */
+    public DocumentVerificationOutcome verifyUploadedDocument(byte[] content, UUID candidateId) {
+        if (content == null || content.length == 0) {
+            return DocumentVerificationOutcome.unableToVerify("Document content must not be empty");
+        }
+        if (content.length > DocumentContentValidator.MAX_ALLOWED_FILE_SIZE) {
+            return DocumentVerificationOutcome.unableToVerify("File size exceeds maximum allowed limit");
+        }
+
+        byte[] uploadedDigest = hasher.hash(content);
+        String hexDigest = java.util.HexFormat.of().formatHex(uploadedDigest);
+
+        Optional<DocumentRecord> documentOpt;
+        if (candidateId != null) {
+            documentOpt = documentStore.findById(candidateId);
+            if (documentOpt.isEmpty()) {
+                return DocumentVerificationOutcome.notFound(hexDigest);
+            }
+            DocumentRecord doc = documentOpt.get();
+            if (!MessageDigest.isEqual(uploadedDigest, doc.digest())) {
+                return DocumentVerificationOutcome.integrityMismatch(candidateId, hexDigest);
+            }
+        } else {
+            documentOpt = documentStore.findByDigest(uploadedDigest);
+            if (documentOpt.isEmpty()) {
+                return DocumentVerificationOutcome.notFound(hexDigest);
+            }
+        }
+
+        DocumentRecord document = documentOpt.get();
+
+        // 1. Verify operational lifecycle / active status
+        if (!document.active()) {
+            return DocumentVerificationOutcome.revoked(document.id(), hexDigest);
+        }
+
+        // 2. Verify authoritative digital signature against public trust anchor
+        boolean signatureValid = signer.verify(document.digest(), document.signature());
+        if (!signatureValid) {
+            return DocumentVerificationOutcome.invalidSignature(document.id(), hexDigest);
+        }
+
+        return DocumentVerificationOutcome.verified(document.id(), hexDigest);
+    }
+
+    /**
+     * Retrieves registered documents for the specified owner or all documents if administrator.
+     */
+    public java.util.List<DocumentRecord> listDocumentsForOwner(String ownerId, boolean isAdmin) {
+        if (isAdmin) {
+            return documentStore.findAll();
+        }
+        return documentStore.findAllByOwnerId(ownerId != null ? ownerId : "system");
+    }
+
+    /**
      * Verifies stored artifact bytes against recorded SHA-256 digest without loading into heap array.
      */
     public boolean verifyArtifactStorageIntegrity(String storageKey, byte[] expectedDigest) throws IOException {
