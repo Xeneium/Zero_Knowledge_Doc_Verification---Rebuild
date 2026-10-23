@@ -128,10 +128,15 @@ public final class DemoCryptoKeyConstants {
     public static KeyPair loadDemoJwtKeyPair() {
         try {
             KeyFactory kf = KeyFactory.getInstance("RSA");
-            byte[] pubBytes = Base64.getDecoder().decode(DEMO_JWT_PUB_B64);
             byte[] privBytes = Base64.getDecoder().decode(DEMO_JWT_PRIV_B64);
-            PublicKey pub = kf.generatePublic(new X509EncodedKeySpec(pubBytes));
-            PrivateKey priv = kf.generatePrivate(new PKCS8EncodedKeySpec(privBytes));
+            PrivateKey priv = kf.generatePrivate(new java.security.spec.PKCS8EncodedKeySpec(privBytes));
+            PublicKey pub;
+            if (priv instanceof java.security.interfaces.RSAPrivateCrtKey crt) {
+                pub = kf.generatePublic(new java.security.spec.RSAPublicKeySpec(crt.getModulus(), crt.getPublicExponent()));
+            } else {
+                byte[] pubBytes = Base64.getDecoder().decode(DEMO_JWT_PUB_B64);
+                pub = kf.generatePublic(new java.security.spec.X509EncodedKeySpec(pubBytes));
+            }
             return new KeyPair(pub, priv);
         } catch (Exception e) {
             throw new IllegalStateException("Failed to load demo JWT keypair", e);

@@ -28,15 +28,15 @@ public class JdbcArtifactStore implements ArtifactStore {
                     id, document_id, artifact_version, content_type, file_size, sha256_digest, storage_key, status, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                artifact.id().value().toString(),
-                artifact.documentId().value().toString(),
+                artifact.id().value(),
+                artifact.documentId().value(),
                 artifact.artifactVersion(),
                 artifact.contentType(),
                 artifact.fileSize(),
                 artifact.digest().toHex(),
                 artifact.storageKey(),
                 artifact.status().name(),
-                artifact.createdAt().toString());
+                toTimestamp(artifact.createdAt()));
     }
 
     @Override
@@ -47,7 +47,7 @@ public class JdbcArtifactStore implements ArtifactStore {
                 WHERE id = ?
                 """,
                 resultSet -> resultSet.next() ? Optional.of(map(resultSet)) : Optional.empty(),
-                id.value().toString());
+                id.value());
     }
 
     @Override
@@ -59,7 +59,7 @@ public class JdbcArtifactStore implements ArtifactStore {
                 ORDER BY artifact_version DESC
                 """,
                 (rs, rowNum) -> map(rs),
-                documentId.value().toString());
+                documentId.value());
     }
 
     private DocumentArtifact map(ResultSet rs) throws SQLException {
@@ -72,6 +72,70 @@ public class JdbcArtifactStore implements ArtifactStore {
                 Digest.fromHex(rs.getString("sha256_digest")),
                 rs.getString("storage_key"),
                 ArtifactStatus.valueOf(rs.getString("status")),
-                Instant.parse(rs.getString("created_at")));
+                parseInstant(rs, "created_at"));
+    }
+
+    private static java.sql.Timestamp toTimestamp(Instant instant) {
+        return instant != null ? java.sql.Timestamp.from(instant) : null;
+    }
+
+    private static Instant parseInstant(ResultSet rs, String column) {
+        try {
+            Object obj = rs.getObject(column);
+            if (obj instanceof java.sql.Timestamp ts) {
+                return ts.toInstant();
+            }
+            if (obj instanceof java.time.OffsetDateTime odt) {
+                return odt.toInstant();
+            }
+            if (obj instanceof java.time.Instant inst) {
+                return inst;
+            }
+            if (obj instanceof Number num) {
+                return Instant.ofEpochMilli(num.longValue());
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            java.sql.Timestamp ts = rs.getTimestamp(column);
+            if (ts != null) {
+                return ts.toInstant();
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            String str = rs.getString(column);
+            if (str != null && !str.isBlank()) {
+                String trimmed = str.trim();
+                if (trimmed.chars().allMatch(Character::isDigit)) {
+                    try {
+                        return Instant.ofEpochMilli(Long.parseLong(trimmed));
+                    } catch (Exception ignored) {
+                    }
+                }
+                String normalized = trimmed.replace(" ", "T");
+                try {
+                    return Instant.parse(normalized);
+                } catch (Exception ignored) {
+                }
+                try {
+                    return java.time.OffsetDateTime.parse(normalized).toInstant();
+                } catch (Exception ignored) {
+                }
+                try {
+                    return java.time.LocalDateTime.parse(normalized).toInstant(java.time.ZoneOffset.UTC);
+                } catch (Exception ignored) {
+                }
+                if (!normalized.endsWith("Z") && !normalized.contains("+")
+                        && !normalized.substring(Math.min(10, normalized.length())).contains("-")) {
+                    try {
+                        return Instant.parse(normalized + "Z");
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 }

@@ -29,7 +29,7 @@ public class JdbcCommitmentStore implements CommitmentStore {
                 INSERT INTO attribute_commitments (
                     id, credential_id, attribute_name, commitment, attestation, attestation_payload, blinding_fingerprint)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, commitment.id().toString(), commitment.credentialId().toString(), commitment.attributeName(),
+                """, commitment.id(), commitment.credentialId(), commitment.attributeName(),
                 commitment.commitment(), commitment.attestation(), commitment.attestationPayload(),
                 commitment.blindingFingerprint());
     }
@@ -44,7 +44,7 @@ public class JdbcCommitmentStore implements CommitmentStore {
                 ORDER BY created_at DESC
                 LIMIT 1
                 """, resultSet -> resultSet.next() ? Optional.of(map(resultSet)) : Optional.empty(),
-                credentialId.toString(), attributeName);
+                credentialId, attributeName);
     }
 
     @Override
@@ -60,7 +60,7 @@ public class JdbcCommitmentStore implements CommitmentStore {
                 FROM attribute_commitments
                 WHERE id = ?
                 """, resultSet -> resultSet.next() ? Optional.of(map(resultSet)) : Optional.empty(),
-                commitmentId.toString());
+                commitmentId);
     }
 
     private AttributeCommitment map(ResultSet resultSet) throws SQLException {

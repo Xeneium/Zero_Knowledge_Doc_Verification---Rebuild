@@ -29,15 +29,15 @@ public class JdbcCredentialLifecycleEventStore implements CredentialLifecycleEve
                     id, credential_id, event_type, actor_id, actor_role, from_status, to_status, reason, timestamp, metadata_json)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                event.id().toString(),
-                event.credentialId().toString(),
+                event.id(),
+                event.credentialId(),
                 event.eventType(),
                 event.actor(),
                 event.actorRole(),
                 event.fromStatus().name(),
                 event.toStatus().name(),
                 event.reason(),
-                event.timestamp().toString(),
+                toTimestamp(event.timestamp()),
                 event.metadataJson());
     }
 
@@ -51,7 +51,7 @@ public class JdbcCredentialLifecycleEventStore implements CredentialLifecycleEve
                 ORDER BY timestamp ASC
                 """,
                 (rs, rowNum) -> map(rs),
-                credentialId.toString());
+                credentialId);
     }
 
     private CredentialLifecycleEvent map(ResultSet rs) throws SQLException {
@@ -64,7 +64,11 @@ public class JdbcCredentialLifecycleEventStore implements CredentialLifecycleEve
                 CredentialStatus.valueOf(rs.getString("from_status")),
                 CredentialStatus.valueOf(rs.getString("to_status")),
                 rs.getString("reason"),
-                Instant.parse(rs.getString("timestamp")),
+                JdbcTypeUtils.parseInstant(rs, "timestamp"),
                 rs.getString("metadata_json"));
+    }
+
+    private static java.sql.Timestamp toTimestamp(Instant instant) {
+        return JdbcTypeUtils.toTimestamp(instant);
     }
 }

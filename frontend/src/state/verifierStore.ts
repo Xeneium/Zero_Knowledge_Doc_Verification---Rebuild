@@ -3,6 +3,7 @@ import type {
   CapabilityPublicVerificationResponse,
   PublicVerificationResult,
   DocumentVerificationResult,
+  DocumentVerificationOutcome,
   CredentialVerificationResult,
   CredentialPredicateVerificationResponse,
 } from '../api/types';
@@ -25,10 +26,12 @@ export type UnifiedVerificationResult =
     }
   | {
       kind: 'DOCUMENT_UPLOAD';
-      documentId: string;
+      documentId?: string;
+      digest?: string;
       fileName: string;
       fileSize: number;
-      response: DocumentVerificationResult;
+      response?: DocumentVerificationResult;
+      outcome?: DocumentVerificationOutcome;
       timestamp: string;
     }
   | {
@@ -104,7 +107,10 @@ export const verifierStore = {
           item.kind === 'DOCUMENT_UPLOAD' &&
           result.kind === 'DOCUMENT_UPLOAD'
         ) {
-          return item.documentId !== result.documentId;
+          const itemKey = item.documentId || item.digest || item.fileName;
+          const resultKey =
+            result.documentId || result.digest || result.fileName;
+          return itemKey !== resultKey;
         }
         if (
           item.kind === 'CREDENTIAL_SIGNATURE' &&

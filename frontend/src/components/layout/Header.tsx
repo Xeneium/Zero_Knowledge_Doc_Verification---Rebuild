@@ -30,10 +30,11 @@ export const Header: React.FC = () => {
         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-slate-100 dark:hover:bg-slate-800',
     );
 
-  const canAccessHolder = authStore.hasAnyRole(['HOLDER', 'ADMIN']);
-  const canAccessIssuer = authStore.hasAnyRole(['ISSUER', 'ADMIN']);
-  const canAccessAudit = authStore.hasAnyRole(['ADMIN', 'ISSUER']);
-  const canAccessAdmin = authStore.hasAnyRole(['ADMIN']);
+  const userRoles = auth.isAuthenticated && auth.user ? auth.user.roles : [];
+  const canAccessHolder = userRoles.includes('HOLDER') || userRoles.includes('ADMIN');
+  const canAccessIssuer = userRoles.includes('ISSUER') || userRoles.includes('ADMIN');
+  const canAccessAudit = userRoles.includes('ADMIN') || userRoles.includes('ISSUER');
+  const canAccessAdmin = userRoles.includes('ADMIN');
 
   return (
     <>
@@ -64,7 +65,7 @@ export const Header: React.FC = () => {
         </div>
       )}
 
-      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur-xs transition-colors dark:border-slate-800 dark:bg-slate-900/95">
+      <header role="banner" className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur-xs transition-colors dark:border-slate-800 dark:bg-slate-900/95">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="flex h-16 items-center justify-between">
             {/* Brand Identity */}

@@ -25,14 +25,14 @@ public class JdbcHolderCredentialStore implements HolderCredentialStore {
                     id, holder_id, credential_id, credential_digest, status, version, provisioned_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                holderCredential.id().value().toString(),
+                holderCredential.id().value(),
                 holderCredential.holderId().value(),
-                holderCredential.credentialId().value().toString(),
+                holderCredential.credentialId().value(),
                 holderCredential.credentialDigest(),
                 holderCredential.status().name(),
                 holderCredential.version(),
-                holderCredential.provisionedAt().toString(),
-                holderCredential.updatedAt().toString());
+                toTimestamp(holderCredential.provisionedAt()),
+                toTimestamp(holderCredential.updatedAt()));
     }
 
     @Override
@@ -43,7 +43,7 @@ public class JdbcHolderCredentialStore implements HolderCredentialStore {
                 WHERE id = ?
                 """,
                 rs -> rs.next() ? Optional.of(map(rs)) : Optional.empty(),
-                id.value().toString());
+                id.value());
     }
 
     @Override
@@ -55,7 +55,7 @@ public class JdbcHolderCredentialStore implements HolderCredentialStore {
                 """,
                 rs -> rs.next() ? Optional.of(map(rs)) : Optional.empty(),
                 holderId.value(),
-                credentialId.value().toString());
+                credentialId.value());
     }
 
     @Override
@@ -78,8 +78,8 @@ public class JdbcHolderCredentialStore implements HolderCredentialStore {
                 WHERE id = ?
                 """,
                 status.name(),
-                Instant.now().toString(),
-                id.value().toString());
+                toTimestamp(Instant.now()),
+                id.value());
     }
 
     @Override
@@ -90,7 +90,7 @@ public class JdbcHolderCredentialStore implements HolderCredentialStore {
                 """,
                 Integer.class,
                 holderId.value(),
-                credentialId.value().toString());
+                credentialId.value());
         return count != null && count > 0;
     }
 
@@ -102,7 +102,11 @@ public class JdbcHolderCredentialStore implements HolderCredentialStore {
                 rs.getBytes("credential_digest"),
                 HolderCredentialStatus.valueOf(rs.getString("status")),
                 rs.getInt("version"),
-                Instant.parse(rs.getString("provisioned_at")),
-                Instant.parse(rs.getString("updated_at")));
+                JdbcTypeUtils.parseInstant(rs, "provisioned_at"),
+                JdbcTypeUtils.parseInstant(rs, "updated_at"));
+    }
+
+    private static java.sql.Timestamp toTimestamp(Instant instant) {
+        return JdbcTypeUtils.toTimestamp(instant);
     }
 }

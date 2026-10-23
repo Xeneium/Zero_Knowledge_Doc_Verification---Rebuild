@@ -8,6 +8,7 @@ import { PublicVerificationPage } from '../routes/PublicVerificationPage';
 import { AuditLogsPage } from '../routes/AuditLogsPage';
 import { AdminDashboardPage } from '../routes/AdminDashboardPage';
 import { IssuerDashboardPage } from '../routes/IssuerDashboardPage';
+import { DocumentUploadPage } from '../routes/DocumentUploadPage';
 import { HolderDashboardPage } from '../routes/HolderDashboardPage';
 import { ForbiddenPage } from '../routes/ForbiddenPage';
 import { NotFoundPage } from '../routes/NotFoundPage';
@@ -41,10 +42,11 @@ export const App: React.FC = () => {
                 <Route path="holder" element={<HolderDashboardPage />} />
               </Route>
 
-              {/* Issuer Workspace (Phase F6) */}
+              {/* Document Upload & Issuer Workspace (Phase 6) */}
               <Route
                 element={<RequireRole allowedRoles={['ISSUER', 'ADMIN']} />}
               >
+                <Route path="upload" element={<DocumentUploadPage />} />
                 <Route path="issuer" element={<IssuerDashboardPage />} />
               </Route>
 

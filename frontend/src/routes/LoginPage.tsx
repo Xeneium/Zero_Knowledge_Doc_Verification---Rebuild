@@ -219,6 +219,12 @@ export const LoginPage: React.FC = () => {
         /* Token Input Form */
         <Card className="p-6">
           <form onSubmit={handleSubmit} noValidate className="space-y-5">
+            {auth.status === 'expired' && !submitError && (
+              <Alert variant="warning" title="Session Expired">
+                {auth.error ||
+                  'Your cryptographic session has expired. Please connect a valid Bearer JWT to continue.'}
+              </Alert>
+            )}
             {submitError && (
               <Alert variant="danger" title="Authentication Failed">
                 {submitError}
@@ -331,6 +337,8 @@ export const LoginPage: React.FC = () => {
                     {...fieldProps}
                     rows={4}
                     value={tokenInput}
+                    autoComplete="off"
+                    spellCheck={false}
                     onChange={(e) => {
                       setTokenInput(e.target.value);
                       if (submitError) setSubmitError(null);

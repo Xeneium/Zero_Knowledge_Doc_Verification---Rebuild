@@ -171,6 +171,34 @@ public class PublicVerificationController {
         return CapabilityPublicVerificationResponse.failure(ctx.mode().name(), "QR_V1", "Unbound capability");
     }
 
+    /**
+     * Direct file upload verification for public verifiers (no login required).
+     * Calculates SHA-256 digest of uploaded file and matches against the platform registry
+     * or against optional candidate documentId.
+     */
+    @org.springframework.web.bind.annotation.PostMapping(value = "/upload", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<com.zkdoc.document.DocumentVerificationOutcome> verifyUploadedFile(
+            @org.springframework.web.bind.annotation.RequestParam("file") org.springframework.web.multipart.MultipartFile file,
+            @org.springframework.web.bind.annotation.RequestParam(value = "documentId", required = false) java.util.UUID documentId) {
+        if (file == null || file.isEmpty()) {
+            verificationAuditService.record(null, "PUBLIC_UPLOAD_VERIFICATION", null, documentId, false);
+            return ResponseEntity.badRequest().body(com.zkdoc.document.DocumentVerificationOutcome.unableToVerify("Uploaded file must not be empty"));
+        }
+        try {
+            long start = System.nanoTime();
+            com.zkdoc.document.DocumentVerificationOutcome outcome = documentUploadService.verifyUploadedDocument(file.getBytes(), documentId);
+            verificationAuditService.record(null, "PUBLIC_UPLOAD_VERIFICATION", null, outcome.documentId(), outcome.verified());
+            if (zkdocMetrics != null) {
+                zkdocMetrics.recordPublicVerification("MODE_B_UPLOAD", outcome.status().name(), java.time.Duration.ofNanos(System.nanoTime() - start));
+            }
+            return ResponseEntity.ok(outcome);
+        } catch (Exception ex) {
+            verificationAuditService.record(null, "PUBLIC_UPLOAD_VERIFICATION", null, documentId, false);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(com.zkdoc.document.DocumentVerificationOutcome.unableToVerify("Failed to process uploaded document: " + ex.getMessage()));
+        }
+    }
+
     @ExceptionHandler(DocumentNotFoundException.class)
     public ResponseEntity<Void> unknownToken() {
         verificationAuditService.record(null, "PUBLIC_DOCUMENT_VERIFY", null, null, false);

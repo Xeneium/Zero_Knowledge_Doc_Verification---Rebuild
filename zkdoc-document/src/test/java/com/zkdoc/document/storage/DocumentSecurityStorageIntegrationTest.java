@@ -57,6 +57,25 @@ class DocumentSecurityStorageIntegrationTest {
                     .filter(r -> r.publicToken().equals(publicToken))
                     .findFirst();
         }
+
+        @Override
+        public Optional<DocumentRecord> findByDigest(byte[] digest) {
+            return records.values().stream()
+                    .filter(r -> java.security.MessageDigest.isEqual(r.digest(), digest))
+                    .findFirst();
+        }
+
+        @Override
+        public List<DocumentRecord> findAllByOwnerId(String ownerId) {
+            return records.values().stream()
+                    .filter(r -> ownerId != null && ownerId.equals(r.ownerId()))
+                    .toList();
+        }
+
+        @Override
+        public List<DocumentRecord> findAll() {
+            return new ArrayList<>(records.values());
+        }
     }
 
     static class InMemoryTestArtifactStore implements ArtifactStore {

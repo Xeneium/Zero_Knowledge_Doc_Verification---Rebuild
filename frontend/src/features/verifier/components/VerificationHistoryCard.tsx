@@ -67,7 +67,11 @@ export const VerificationHistoryCard: React.FC<
                 item.response.signatureValid && item.response.documentActive;
               target = item.token;
             } else if (isUpload) {
-              isValid = item.response.verified;
+              isValid = Boolean(
+                item.outcome
+                  ? item.outcome.status === 'VERIFIED'
+                  : item.response?.verified,
+              );
               target = item.fileName;
             } else if (isCred) {
               isValid = item.response.verified;

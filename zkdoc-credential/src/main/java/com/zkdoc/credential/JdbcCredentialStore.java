@@ -23,7 +23,7 @@ public class JdbcCredentialStore implements CredentialStore {
                 INSERT INTO credentials (
                     credential_id, issuer_id, issued_at, expires_at, status, canonical_payload, digest, signature, version)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
-                """, credential.credentialId().toString(), credential.issuerIdString(), credential.issuedAt().toString(), credential.expiresAt().toString(),
+                """, credential.credentialId(), credential.issuerIdString(), toTimestamp(credential.issuedAt()), toTimestamp(credential.expiresAt()),
                 credential.status().name(), signedCredential.canonicalPayload(), signedCredential.digest(),
                 signedCredential.signature());
     }
@@ -35,7 +35,7 @@ public class JdbcCredentialStore implements CredentialStore {
                        suspended_at, suspension_reason, revoked_at, revocation_reason, version
                 FROM credentials
                 WHERE credential_id = ?
-                """, resultSet -> resultSet.next() ? Optional.of(map(resultSet)) : Optional.empty(), credentialId.toString());
+                """, resultSet -> resultSet.next() ? Optional.of(map(resultSet)) : Optional.empty(), credentialId);
     }
 
     @Override
@@ -48,8 +48,6 @@ public class JdbcCredentialStore implements CredentialStore {
             String suspensionReason,
             Instant revokedAt,
             String revocationReason) {
-        String suspendedAtStr = suspendedAt != null ? suspendedAt.toString() : null;
-        String revokedAtStr = revokedAt != null ? revokedAt.toString() : null;
 
         int updated = jdbcTemplate.update("""
                 UPDATE credentials
@@ -62,11 +60,11 @@ public class JdbcCredentialStore implements CredentialStore {
                 WHERE credential_id = ? AND version = ?
                 """,
                 targetStatus.name(),
-                suspendedAtStr,
+                toTimestamp(suspendedAt),
                 suspensionReason,
-                revokedAtStr,
+                toTimestamp(revokedAt),
                 revocationReason,
-                credentialId.toString(),
+                credentialId,
                 expectedVersion);
 
         return updated == 1;
@@ -78,18 +76,21 @@ public class JdbcCredentialStore implements CredentialStore {
             issuerId = "system";
         }
 
-        String issuedAtStr = getNullableString(rs, "issued_at");
-        Instant issuedAt = issuedAtStr != null ? Instant.parse(issuedAtStr) : Instant.now();
+        Instant issuedAt = JdbcTypeUtils.parseInstant(rs, "issued_at");
+        if (issuedAt == null) {
+            issuedAt = Instant.EPOCH;
+        }
 
-        Instant expiresAt = Instant.parse(rs.getString("expires_at"));
+        Instant expiresAt = JdbcTypeUtils.parseInstant(rs, "expires_at");
+        if (expiresAt == null) {
+            expiresAt = Instant.EPOCH;
+        }
         CredentialStatus status = CredentialStatus.valueOf(rs.getString("status"));
 
-        String suspendedAtStr = getNullableString(rs, "suspended_at");
-        Instant suspendedAt = suspendedAtStr != null ? Instant.parse(suspendedAtStr) : null;
+        Instant suspendedAt = JdbcTypeUtils.parseInstant(rs, "suspended_at");
         String suspensionReason = getNullableString(rs, "suspension_reason");
 
-        String revokedAtStr = getNullableString(rs, "revoked_at");
-        Instant revokedAt = revokedAtStr != null ? Instant.parse(revokedAtStr) : null;
+        Instant revokedAt = JdbcTypeUtils.parseInstant(rs, "revoked_at");
         String revocationReason = getNullableString(rs, "revocation_reason");
 
         int version = 1;
@@ -116,6 +117,10 @@ public class JdbcCredentialStore implements CredentialStore {
                 revokedAt,
                 revocationReason,
                 version);
+    }
+
+    private static java.sql.Timestamp toTimestamp(Instant instant) {
+        return JdbcTypeUtils.toTimestamp(instant);
     }
 
     private String getNullableString(ResultSet rs, String column) {

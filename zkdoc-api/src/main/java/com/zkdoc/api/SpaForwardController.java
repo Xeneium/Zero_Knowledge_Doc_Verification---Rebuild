@@ -9,8 +9,11 @@ public class SpaForwardController {
     @GetMapping({
             "/",
             "/login",
+            "/upload",
             "/verify",
+            "/verify/**",
             "/credentials",
+            "/credentials/**",
             "/verification",
             "/predicate-verification",
             "/audit-logs",

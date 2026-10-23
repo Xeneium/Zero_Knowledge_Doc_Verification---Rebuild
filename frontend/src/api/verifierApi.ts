@@ -1,9 +1,11 @@
 import { apiRequest } from './client';
 import { ENDPOINTS } from './endpoints';
+import { authStore } from '../state/authStore';
 import type {
   PublicVerificationResult,
   CapabilityPublicVerificationResponse,
   DocumentVerificationResult,
+  DocumentVerificationOutcome,
   CredentialVerificationResult,
   CredentialLifecycleResponse,
   CredentialPredicateVerificationRequest,
@@ -57,6 +59,33 @@ export const verifierApi = {
         body: formData,
       },
     );
+  },
+
+  /**
+   * Mode B: Direct document upload verification without requiring an embedded QR code.
+   * If candidateId is provided, compares candidate file digest against that registration.
+   * If candidateId is omitted, looks up registration matching candidate file digest.
+   * Dynamically routes to /api/documents/verify-upload if authenticated, or /api/public/verify/upload if unauthenticated.
+   */
+  async verifyUploadedDocumentDirect(
+    file: File,
+    candidateId?: string,
+  ): Promise<DocumentVerificationOutcome> {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (candidateId && candidateId.trim()) {
+      formData.append('documentId', candidateId.trim());
+    }
+
+    const isAuthenticated = authStore.getState().isAuthenticated;
+    const endpoint = isAuthenticated
+      ? ENDPOINTS.DOCUMENT_DIRECT_VERIFY_UPLOAD
+      : ENDPOINTS.PUBLIC_VERIFY_UPLOAD;
+
+    return apiRequest<DocumentVerificationOutcome>(endpoint, {
+      method: 'POST',
+      body: formData,
+    });
   },
 
   /**
